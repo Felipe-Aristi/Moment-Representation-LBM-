@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read and validate Taylor--Green kinetic-energy statistics."""
+"""Read and validate Taylor-Green scalar statistics."""
 
 from __future__ import annotations
 
@@ -12,14 +12,24 @@ import numpy as np
 
 
 VALIDATION_DIRECTORY: Final = Path(__file__).resolve().parent
+
 DEFAULT_CASE_NAME: Final = "TG_RE_1600"
-KINETIC_ENERGY_FILENAME: Final = "kinetic_energy.bin"
+
 METADATA_FILENAME: Final = "statistics_metadata.txt"
+KINETIC_ENERGY_FILENAME: Final = "kinetic_energy.bin"
+ENSTROPHY_FILENAME: Final = "enstrophy.bin"
+
 EXPECTED_INITIAL_KSTAR: Final = 0.125
-INITIAL_KSTAR_RTOL: Final = 1.0e-5
+EXPECTED_CONTINUUM_INITIAL_ZETASTAR: Final = 0.375
+
+INITIAL_RTOL: Final = 1.0e-5
+
 
 _REQUIRED_METADATA_KEYS: Final = frozenset(
     {
+        "format_version",
+        "kinetic_energy_file",
+        "enstrophy_file",
         "Re",
         "NX",
         "NY",
@@ -30,35 +40,50 @@ _REQUIRED_METADATA_KEYS: Final = frozenset(
         "Nphysical",
         "tgv_U0",
         "tgv_kx",
+        "tgv_ky",
+        "tgv_kz",
         "tgv_L",
+        "Steps",
         "statisticsStart",
         "statisticsEvery",
         "record_step_dtype",
-        "record_SK_dtype",
+        "record_value_dtype",
+        "record_value_encoding",
         "record_byte_order",
         "record_layout",
         "record_step_offset_bytes",
-        "record_SK_offset_bytes",
+        "record_value_offset_bytes",
         "record_step_bytes",
-        "record_SK_bytes",
-        "record_SK_encoding",
+        "record_value_bytes",
         "record_bytes",
+        "kinetic_energy_definition",
+        "enstrophy_definition",
+        "vorticity_derivative",
+        "grid_spacing",
     }
 )
 
 
 class StatisticsFormatError(ValueError):
-    """Raised when statistics metadata or binary data is inconsistent."""
+    """Raised when Taylor-Green statistics files are inconsistent."""
 
 
 @dataclass(frozen=True)
 class KineticEnergyHistory:
-    """Validated raw and dimensionless Taylor--Green kinetic-energy history."""
-
     step: np.ndarray
     SK: np.ndarray
     tStar: np.ndarray
     KStar: np.ndarray
+    metadata: dict[str, str]
+    case_directory: Path
+
+
+@dataclass(frozen=True)
+class EnstrophyHistory:
+    step: np.ndarray
+    Szeta: np.ndarray
+    tStar: np.ndarray
+    ZetaStar: np.ndarray
     metadata: dict[str, str]
     case_directory: Path
 
@@ -68,8 +93,6 @@ def _format_error(path: Path, message: str) -> StatisticsFormatError:
 
 
 def read_statistics_metadata(path: str | Path) -> dict[str, str]:
-    """Read the whitespace-separated ``key value`` metadata format."""
-
     metadata_path = Path(path)
 
     try:
@@ -105,12 +128,12 @@ def read_statistics_metadata(path: str | Path) -> dict[str, str]:
 
         metadata[key] = value
 
-    missing_keys = sorted(_REQUIRED_METADATA_KEYS.difference(metadata))
+    missing = sorted(_REQUIRED_METADATA_KEYS.difference(metadata))
 
-    if missing_keys:
+    if missing:
         raise _format_error(
             metadata_path,
-            "missing required metadata keys: " + ", ".join(missing_keys),
+            "missing required metadata keys: " + ", ".join(missing),
         )
 
     return metadata
@@ -136,7 +159,25 @@ def _metadata_float(metadata: dict[str, str], key: str, path: Path) -> float:
 
 
 def _validate_metadata(metadata: dict[str, str], path: Path) -> np.dtype:
-    integer_values = {
+    if metadata["format_version"] != "2":
+        raise _format_error(
+            path,
+            f"unsupported format_version '{metadata['format_version']}'",
+        )
+
+    if metadata["kinetic_energy_file"] != KINETIC_ENERGY_FILENAME:
+        raise _format_error(
+            path,
+            f"kinetic_energy_file must be '{KINETIC_ENERGY_FILENAME}'",
+        )
+
+    if metadata["enstrophy_file"] != ENSTROPHY_FILENAME:
+        raise _format_error(
+            path,
+            f"enstrophy_file must be '{ENSTROPHY_FILENAME}'",
+        )
+
+    integers = {
         key: _metadata_int(metadata, key, path)
         for key in (
             "NX",
@@ -146,117 +187,301 @@ def _validate_metadata(metadata: dict[str, str], path: Path) -> np.dtype:
             "NYPhysical",
             "NZPhysical",
             "Nphysical",
+            "Steps",
             "statisticsStart",
             "statisticsEvery",
             "record_step_offset_bytes",
-            "record_SK_offset_bytes",
+            "record_value_offset_bytes",
             "record_step_bytes",
-            "record_SK_bytes",
+            "record_value_bytes",
             "record_bytes",
         )
     }
 
-    for key in ("Re", "tgv_U0", "tgv_kx", "tgv_L"):
-        value = _metadata_float(metadata, key, path)
-
-        if value <= 0.0:
-            raise _format_error(path, f"metadata key '{key}' must be positive")
-
     for dimension in ("NX", "NY", "NZ"):
-        if integer_values[dimension] <= 2:
-            raise _format_error(path, f"metadata key '{dimension}' must exceed two")
+        if integers[dimension] <= 2:
+            raise _format_error(path, f"{dimension} must be larger than two")
 
-    physical_dimensions = (
-        ("NX", "NXPhysical"),
-        ("NY", "NYPhysical"),
-        ("NZ", "NZPhysical"),
-    )
+    if integers["NXPhysical"] != integers["NX"] - 2:
+        raise _format_error(path, "NXPhysical must equal NX - 2")
 
-    for stored_key, physical_key in physical_dimensions:
-        if integer_values[physical_key] != integer_values[stored_key] - 2:
-            raise _format_error(
-                path,
-                f"metadata key '{physical_key}' must equal {stored_key} - 2",
-            )
+    if integers["NYPhysical"] != integers["NY"] - 2:
+        raise _format_error(path, "NYPhysical must equal NY - 2")
+
+    if integers["NZPhysical"] != integers["NZ"] - 2:
+        raise _format_error(path, "NZPhysical must equal NZ - 2")
 
     physical_count = (
-        integer_values["NXPhysical"]
-        * integer_values["NYPhysical"]
-        * integer_values["NZPhysical"]
+        integers["NXPhysical"]
+        * integers["NYPhysical"]
+        * integers["NZPhysical"]
     )
 
-    if integer_values["Nphysical"] != physical_count:
+    if integers["Nphysical"] != physical_count:
         raise _format_error(
             path,
-            "metadata key 'Nphysical' does not match the physical dimensions",
+            "Nphysical does not match the physical dimensions",
         )
 
-    if integer_values["statisticsStart"] < 0:
-        raise _format_error(path, "metadata key 'statisticsStart' cannot be negative")
+    if integers["Steps"] < 0:
+        raise _format_error(path, "Steps cannot be negative")
 
-    if integer_values["statisticsEvery"] <= 0:
-        raise _format_error(path, "metadata key 'statisticsEvery' must be positive")
+    if integers["statisticsStart"] < 0:
+        raise _format_error(path, "statisticsStart cannot be negative")
 
-    expected_text_values = {
-        "record_step_dtype": "uint32",
-        "record_SK_dtype": "float64",
-        "record_byte_order": "little_endian",
-        "record_layout": "step_then_SK",
-        "record_SK_encoding": "ieee754_binary64",
-    }
+    if integers["statisticsEvery"] <= 0:
+        raise _format_error(path, "statisticsEvery must be positive")
 
-    for key, expected_value in expected_text_values.items():
-        if metadata[key] != expected_value:
-            raise _format_error(
-                path,
-                f"metadata key '{key}' must be '{expected_value}', got '{metadata[key]}'",
-            )
+    for key in ("Re", "tgv_U0", "tgv_kx", "tgv_ky", "tgv_kz", "tgv_L"):
+        if _metadata_float(metadata, key, path) <= 0.0:
+            raise _format_error(path, f"metadata key '{key}' must be positive")
 
-    expected_integer_values = {
-        "record_step_offset_bytes": 0,
-        "record_SK_offset_bytes": 4,
-        "record_step_bytes": 4,
-        "record_SK_bytes": 8,
-        "record_bytes": 12,
-    }
+    if metadata["record_step_dtype"] != "uint32":
+        raise _format_error(path, "record_step_dtype must be uint32")
 
-    for key, expected_value in expected_integer_values.items():
-        if integer_values[key] != expected_value:
-            raise _format_error(
-                path,
-                f"metadata key '{key}' must be {expected_value}, got {integer_values[key]}",
-            )
+    if metadata["record_byte_order"] != "little_endian":
+        raise _format_error(path, "record_byte_order must be little_endian")
 
-    if "format_version" in metadata and metadata["format_version"] != "1":
-        raise _format_error(path, "unsupported statistics format version")
+    if metadata["record_layout"] != "step_then_value":
+        raise _format_error(path, "record_layout must be step_then_value")
 
-    if "statistics_file" in metadata and metadata["statistics_file"] != KINETIC_ENERGY_FILENAME:
+    if integers["record_step_offset_bytes"] != 0:
+        raise _format_error(path, "record_step_offset_bytes must be 0")
+
+    if integers["record_value_offset_bytes"] != 4:
+        raise _format_error(path, "record_value_offset_bytes must be 4")
+
+    if integers["record_step_bytes"] != 4:
+        raise _format_error(path, "record_step_bytes must be 4")
+
+    value_dtype_name = metadata["record_value_dtype"]
+
+    if value_dtype_name == "float32":
+        value_format = "<f4"
+        expected_value_bytes = 4
+        expected_encoding = "ieee754_binary32"
+    elif value_dtype_name == "float64":
+        value_format = "<f8"
+        expected_value_bytes = 8
+        expected_encoding = "ieee754_binary64"
+    else:
         raise _format_error(
             path,
-            f"metadata key 'statistics_file' must be '{KINETIC_ENERGY_FILENAME}'",
+            f"unsupported record_value_dtype '{value_dtype_name}'",
         )
 
-    record_dtype = np.dtype(
+    if metadata["record_value_encoding"] != expected_encoding:
+        raise _format_error(
+            path,
+            f"record_value_encoding must be '{expected_encoding}'",
+        )
+
+    if integers["record_value_bytes"] != expected_value_bytes:
+        raise _format_error(
+            path,
+            f"record_value_bytes must be {expected_value_bytes}",
+        )
+
+    expected_record_bytes = 4 + expected_value_bytes
+
+    if integers["record_bytes"] != expected_record_bytes:
+        raise _format_error(
+            path,
+            f"record_bytes must be {expected_record_bytes}",
+        )
+
+    if metadata["kinetic_energy_definition"] != "half_velocity_squared_sum":
+        raise _format_error(
+            path,
+            "unexpected kinetic-energy definition",
+        )
+
+    if metadata["enstrophy_definition"] != "half_vorticity_squared_sum":
+        raise _format_error(
+            path,
+            "unexpected enstrophy definition",
+        )
+
+    if metadata["vorticity_derivative"] != "central_second_order":
+        raise _format_error(
+            path,
+            "unexpected vorticity derivative",
+        )
+
+    grid_spacing = _metadata_float(metadata, "grid_spacing", path)
+
+    if not np.isclose(grid_spacing, 1.0):
+        raise _format_error(path, "grid_spacing must equal 1")
+
+    dtype = np.dtype(
         {
-            "names": ("step", "SK"),
-            "formats": ("<u4", "<f8"),
+            "names": ("step", "value"),
+            "formats": ("<u4", value_format),
             "offsets": (0, 4),
-            "itemsize": 12,
+            "itemsize": expected_record_bytes,
         }
     )
 
-    if (
-        record_dtype.itemsize != integer_values["record_bytes"]
-        or record_dtype.fields["step"][1] != integer_values["record_step_offset_bytes"]
-        or record_dtype.fields["SK"][1] != integer_values["record_SK_offset_bytes"]
+    return dtype
+
+
+def _expected_sample_steps(
+    steps: int,
+    statistics_start: int,
+    statistics_every: int,
+) -> np.ndarray:
+    samples = [0]
+
+    first_scheduled = (
+        statistics_start
+        if statistics_start > 0
+        else statistics_every
+    )
+
+    if first_scheduled <= steps:
+        samples.extend(
+            range(
+                first_scheduled,
+                steps + 1,
+                statistics_every,
+            )
+        )
+
+    return np.asarray(samples, dtype=np.uint32)
+
+
+def _load_scalar_history(
+    filename: str,
+    *,
+    case_name: str,
+    case_directory: str | Path | None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, str], Path]:
+    if case_directory is None:
+        resolved_case_directory = (
+            VALIDATION_DIRECTORY / "data" / case_name
+        )
+    else:
+        resolved_case_directory = Path(case_directory)
+
+    metadata_path = resolved_case_directory / METADATA_FILENAME
+    binary_path = resolved_case_directory / filename
+
+    metadata = read_statistics_metadata(metadata_path)
+    dtype = _validate_metadata(metadata, metadata_path)
+
+    try:
+        binary_size = binary_path.stat().st_size
+    except OSError as error:
+        raise StatisticsFormatError(
+            f"Unable to inspect '{binary_path}': {error}"
+        ) from error
+
+    if binary_size == 0:
+        raise _format_error(binary_path, "binary history contains no records")
+
+    if binary_size % dtype.itemsize != 0:
+        raise _format_error(
+            binary_path,
+            f"file size {binary_size} is not a multiple of "
+            f"{dtype.itemsize} bytes",
+        )
+
+    expected_count = binary_size // dtype.itemsize
+
+    try:
+        records = np.fromfile(binary_path, dtype=dtype)
+    except OSError as error:
+        raise StatisticsFormatError(
+            f"Unable to read '{binary_path}': {error}"
+        ) from error
+
+    if records.size != expected_count:
+        raise _format_error(
+            binary_path,
+            f"read {records.size} records, expected {expected_count}",
+        )
+
+    step = records["step"].copy()
+    value = records["value"].astype(np.float64)
+
+    if step.size == 0:
+        raise _format_error(binary_path, "binary history is empty")
+
+    if step[0] != 0:
+        raise _format_error(
+            binary_path,
+            f"first sample must be step 0, got {int(step[0])}",
+        )
+
+    if step.size > 1 and np.any(step[1:] <= step[:-1]):
+        raise _format_error(
+            binary_path,
+            "steps must be strictly increasing",
+        )
+
+    if not np.all(np.isfinite(value)):
+        raise _format_error(
+            binary_path,
+            "history contains NaN or Inf",
+        )
+
+    if np.any(value < 0.0):
+        raise _format_error(
+            binary_path,
+            "history contains a negative value",
+        )
+
+    steps = _metadata_int(metadata, "Steps", metadata_path)
+    statistics_start = _metadata_int(
+        metadata,
+        "statisticsStart",
+        metadata_path,
+    )
+    statistics_every = _metadata_int(
+        metadata,
+        "statisticsEvery",
+        metadata_path,
+    )
+
+    expected_steps = _expected_sample_steps(
+        steps,
+        statistics_start,
+        statistics_every,
+    )
+
+    if not np.array_equal(step, expected_steps):
+        raise _format_error(
+            binary_path,
+            "sample sequence does not match Steps/statisticsStart/"
+            "statisticsEvery",
+        )
+
+    u0 = _metadata_float(metadata, "tgv_U0", metadata_path)
+    kx = _metadata_float(metadata, "tgv_kx", metadata_path)
+
+    time_star = step.astype(np.float64) * u0 * kx
+
+    if not np.all(np.isfinite(time_star)):
+        raise _format_error(
+            binary_path,
+            "derived tStar contains NaN or Inf",
+        )
+
+    if time_star.size > 1 and np.any(
+        time_star[1:] <= time_star[:-1]
     ):
-        raise _format_error(path, "NumPy record layout does not match the metadata")
+        raise _format_error(
+            binary_path,
+            "derived tStar is not strictly increasing",
+        )
 
-    return record_dtype
-
-
-def _first_true_index(mask: np.ndarray) -> int:
-    return int(np.flatnonzero(mask)[0])
+    return (
+        step,
+        value,
+        time_star,
+        metadata,
+        resolved_case_directory,
+    )
 
 
 def load_kinetic_energy(
@@ -264,197 +489,262 @@ def load_kinetic_energy(
     *,
     case_directory: str | Path | None = None,
 ) -> KineticEnergyHistory:
-    """Load, validate, and nondimensionalize one TGV kinetic-energy history."""
+    step, SK, tStar, metadata, directory = _load_scalar_history(
+        KINETIC_ENERGY_FILENAME,
+        case_name=case_name,
+        case_directory=case_directory,
+    )
 
-    if case_directory is None:
-        resolved_case_directory = VALIDATION_DIRECTORY / "data" / case_name
-    else:
-        resolved_case_directory = Path(case_directory)
+    metadata_path = directory / METADATA_FILENAME
 
-    metadata_path = resolved_case_directory / METADATA_FILENAME
-    binary_path = resolved_case_directory / KINETIC_ENERGY_FILENAME
-    metadata = read_statistics_metadata(metadata_path)
-    record_dtype = _validate_metadata(metadata, metadata_path)
+    nphysical = _metadata_int(
+        metadata,
+        "Nphysical",
+        metadata_path,
+    )
+    u0 = _metadata_float(
+        metadata,
+        "tgv_U0",
+        metadata_path,
+    )
 
-    try:
-        binary_size = binary_path.stat().st_size
-    except OSError as error:
-        raise StatisticsFormatError(
-            f"Unable to inspect kinetic-energy data '{binary_path}': {error}"
-        ) from error
+    KStar = SK / (float(nphysical) * u0 * u0)
 
-    if binary_size == 0:
-        raise _format_error(binary_path, "binary history contains no records")
-
-    if binary_size % record_dtype.itemsize != 0:
+    if not np.all(np.isfinite(KStar)) or np.any(KStar < 0.0):
         raise _format_error(
-            binary_path,
-            f"file size {binary_size} is not a multiple of the {record_dtype.itemsize}-byte record size",
-        )
-
-    expected_records = binary_size // record_dtype.itemsize
-
-    try:
-        records = np.fromfile(binary_path, dtype=record_dtype)
-    except OSError as error:
-        raise StatisticsFormatError(
-            f"Unable to read kinetic-energy data '{binary_path}': {error}"
-        ) from error
-
-    if records.size != expected_records:
-        raise _format_error(
-            binary_path,
-            f"read {records.size} records, expected {expected_records}",
-        )
-
-    step = records["step"].copy()
-    kinetic_energy_sum = records["SK"].copy()
-
-    if step[0] != 0:
-        raise _format_error(binary_path, f"first sample must be step 0, got {int(step[0])}")
-
-    if step.size > 1:
-        nonincreasing_steps = step[1:] <= step[:-1]
-
-        if np.any(nonincreasing_steps):
-            index = _first_true_index(nonincreasing_steps) + 1
-            raise _format_error(
-                binary_path,
-                f"steps must be strictly increasing; invalid sample at index {index}",
-            )
-
-    nonfinite_energy = ~np.isfinite(kinetic_energy_sum)
-
-    if np.any(nonfinite_energy):
-        index = _first_true_index(nonfinite_energy)
-        raise _format_error(binary_path, f"SK is not finite at sample index {index}")
-
-    negative_energy = kinetic_energy_sum < 0.0
-
-    if np.any(negative_energy):
-        index = _first_true_index(negative_energy)
-        raise _format_error(binary_path, f"SK is negative at sample index {index}")
-
-    statistics_start = _metadata_int(metadata, "statisticsStart", metadata_path)
-    statistics_every = _metadata_int(metadata, "statisticsEvery", metadata_path)
-    scheduled_steps = step[1:]
-
-    if scheduled_steps.size:
-        if statistics_start > 0:
-            sample_due = (scheduled_steps >= statistics_start) & (
-                (scheduled_steps - statistics_start) % statistics_every == 0
-            )
-        else:
-            sample_due = scheduled_steps % statistics_every == 0
-
-        if not np.all(sample_due):
-            index = _first_true_index(~sample_due) + 1
-            raise _format_error(
-                binary_path,
-                f"step {int(step[index])} at sample index {index} is inconsistent with the sampling schedule",
-            )
-
-    u0 = _metadata_float(metadata, "tgv_U0", metadata_path)
-    kx = _metadata_float(metadata, "tgv_kx", metadata_path)
-    physical_count = _metadata_int(metadata, "Nphysical", metadata_path)
-    step_float = step.astype(np.float64)
-    time_star = step_float * u0 * kx
-    energy_star = kinetic_energy_sum / (float(physical_count) * u0 * u0)
-
-    if not np.all(np.isfinite(time_star)):
-        raise _format_error(binary_path, "derived tStar contains a non-finite value")
-
-    if time_star.size > 1:
-        nonincreasing_time = time_star[1:] <= time_star[:-1]
-
-        if np.any(nonincreasing_time):
-            index = _first_true_index(nonincreasing_time) + 1
-            raise _format_error(
-                binary_path,
-                f"derived tStar must be strictly increasing; invalid sample at index {index}",
-            )
-
-    invalid_energy_star = (~np.isfinite(energy_star)) | (energy_star < 0.0)
-
-    if np.any(invalid_energy_star):
-        index = _first_true_index(invalid_energy_star)
-        raise _format_error(
-            binary_path,
-            f"derived KStar is non-finite or negative at sample index {index}",
+            directory / KINETIC_ENERGY_FILENAME,
+            "derived KStar is invalid",
         )
 
     if not np.isclose(
-        energy_star[0],
+        KStar[0],
         EXPECTED_INITIAL_KSTAR,
-        rtol=INITIAL_KSTAR_RTOL,
+        rtol=INITIAL_RTOL,
         atol=np.finfo(np.float64).eps,
     ):
-        relative_error = abs(float(energy_star[0]) - EXPECTED_INITIAL_KSTAR) / EXPECTED_INITIAL_KSTAR
+        relative_error = (
+            abs(float(KStar[0]) - EXPECTED_INITIAL_KSTAR)
+            / EXPECTED_INITIAL_KSTAR
+        )
+
         raise _format_error(
-            binary_path,
-            f"KStar(0)={energy_star[0]:.17g} is inconsistent with 0.125 "
+            directory / KINETIC_ENERGY_FILENAME,
+            f"KStar(0)={KStar[0]:.17g} does not match 0.125 "
             f"(relative error {relative_error:.17g})",
         )
 
     return KineticEnergyHistory(
         step=step,
-        SK=kinetic_energy_sum,
-        tStar=time_star,
-        KStar=energy_star,
+        SK=SK,
+        tStar=tStar,
+        KStar=KStar,
         metadata=metadata,
-        case_directory=resolved_case_directory,
+        case_directory=directory,
     )
 
 
-def _print_summary(history: KineticEnergyHistory) -> None:
-    binary_path = history.case_directory / KINETIC_ENERGY_FILENAME
-    initial_relative_error = (
-        abs(float(history.KStar[0]) - EXPECTED_INITIAL_KSTAR) / EXPECTED_INITIAL_KSTAR
+def expected_initial_enstrophy_star_fd(
+    metadata: dict[str, str],
+    metadata_path: Path,
+) -> float:
+    kx = _metadata_float(
+        metadata,
+        "tgv_kx",
+        metadata_path,
     )
 
-    print(f"case_directory: {history.case_directory}")
-    print(f"samples: {history.step.size}")
-    print(f"binary_bytes: {binary_path.stat().st_size}")
-    print(f"first_step: {int(history.step[0])}")
-    print(f"final_step: {int(history.step[-1])}")
-    print(f"final_tStar: {history.tStar[-1]:.17g}")
-    print(f"SK(0): {history.SK[0]:.17g}")
-    print(f"KStar(0): {history.KStar[0]:.17g}")
-    print(f"KStar(0)_relative_error: {initial_relative_error:.17g}")
+    return 3.0 / 8.0 * (np.sin(kx) / kx) ** 2
+
+
+def load_enstrophy(
+    case_name: str = DEFAULT_CASE_NAME,
+    *,
+    case_directory: str | Path | None = None,
+) -> EnstrophyHistory:
+    step, Szeta, tStar, metadata, directory = _load_scalar_history(
+        ENSTROPHY_FILENAME,
+        case_name=case_name,
+        case_directory=case_directory,
+    )
+
+    metadata_path = directory / METADATA_FILENAME
+
+    nphysical = _metadata_int(
+        metadata,
+        "Nphysical",
+        metadata_path,
+    )
+    u0 = _metadata_float(
+        metadata,
+        "tgv_U0",
+        metadata_path,
+    )
+    length = _metadata_float(
+        metadata,
+        "tgv_L",
+        metadata_path,
+    )
+
+    normalization = (
+        float(nphysical)
+        * u0
+        * u0
+        / (length * length)
+    )
+
+    ZetaStar = Szeta / normalization
+
+    if not np.all(np.isfinite(ZetaStar)) or np.any(ZetaStar < 0.0):
+        raise _format_error(
+            directory / ENSTROPHY_FILENAME,
+            "derived ZetaStar is invalid",
+        )
+
+    expected_fd = expected_initial_enstrophy_star_fd(
+        metadata,
+        metadata_path,
+    )
+
+    if not np.isclose(
+        ZetaStar[0],
+        expected_fd,
+        rtol=INITIAL_RTOL,
+        atol=np.finfo(np.float64).eps,
+    ):
+        relative_error = (
+            abs(float(ZetaStar[0]) - expected_fd)
+            / expected_fd
+        )
+
+        raise _format_error(
+            directory / ENSTROPHY_FILENAME,
+            f"ZetaStar(0)={ZetaStar[0]:.17g} does not match "
+            f"the centered-difference value {expected_fd:.17g} "
+            f"(relative error {relative_error:.17g})",
+        )
+
+    return EnstrophyHistory(
+        step=step,
+        Szeta=Szeta,
+        tStar=tStar,
+        ZetaStar=ZetaStar,
+        metadata=metadata,
+        case_directory=directory,
+    )
+
+
+def _nearest_index(values: np.ndarray, target: float) -> int:
+    return int(np.argmin(np.abs(values - target)))
+
+
+def _print_summary(
+    energy: KineticEnergyHistory,
+    enstrophy: EnstrophyHistory,
+) -> None:
+    print(f"case_directory: {energy.case_directory}")
+    print(f"samples: {energy.step.size}")
+    print(f"first_step: {int(energy.step[0])}")
+    print(f"final_step: {int(energy.step[-1])}")
+    print(f"final_tStar: {energy.tStar[-1]:.17g}")
+
+    print()
+    print("Kinetic energy")
+    print(f"SK(0): {energy.SK[0]:.17g}")
+    print(f"KStar(0): {energy.KStar[0]:.17g}")
+
+    print()
+    print("Enstrophy")
+    print(f"Szeta(0): {enstrophy.Szeta[0]:.17g}")
+    print(f"ZetaStar(0): {enstrophy.ZetaStar[0]:.17g}")
+
+    metadata_path = energy.case_directory / METADATA_FILENAME
+
+    expected_fd = expected_initial_enstrophy_star_fd(
+        enstrophy.metadata,
+        metadata_path,
+    )
+
+    print(f"ZetaStar_FD(0): {expected_fd:.17g}")
+    print(
+        "ZetaStar_continuum(0): "
+        f"{EXPECTED_CONTINUUM_INITIAL_ZETASTAR:.17g}"
+    )
+
+    peak_index = int(np.argmax(enstrophy.ZetaStar))
+
+    print()
+    print("Enstrophy peak")
+    print(f"step: {int(enstrophy.step[peak_index])}")
+    print(f"tStar: {enstrophy.tStar[peak_index]:.17g}")
+    print(f"ZetaStar: {enstrophy.ZetaStar[peak_index]:.17g}")
+
+    print()
+    print("Selected samples")
 
     for target in (0.0, 5.0, 9.0, 10.0, 15.0, 20.0):
-        index = int(np.argmin(np.abs(history.tStar - target)))
+        index = _nearest_index(energy.tStar, target)
+
         print(
-            f"nearest_tStar({target:g}): {history.tStar[index]:.17g} "
-            f"KStar={history.KStar[index]:.17g} step={int(history.step[index])}"
+            f"target={target:g} "
+            f"tStar={energy.tStar[index]:.17g} "
+            f"KStar={energy.KStar[index]:.17g} "
+            f"ZetaStar={enstrophy.ZetaStar[index]:.17g} "
+            f"step={int(energy.step[index])}"
         )
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Read and validate Taylor-Green kinetic-energy statistics."
+        description=(
+            "Read and validate Taylor-Green kinetic-energy "
+            "and enstrophy statistics."
+        )
     )
+
     parser.add_argument(
         "--case",
         default=DEFAULT_CASE_NAME,
-        help=f"case directory name below validation/data (default: {DEFAULT_CASE_NAME})",
+        help=(
+            "case directory name below validation/data "
+            f"(default: {DEFAULT_CASE_NAME})"
+        ),
     )
+
     parser.add_argument(
         "--case-directory",
         type=Path,
-        help="explicit case data directory, overriding --case",
+        help="explicit case directory, overriding --case",
     )
+
     arguments = parser.parse_args()
 
     try:
-        history = load_kinetic_energy(
+        energy = load_kinetic_energy(
+            arguments.case,
+            case_directory=arguments.case_directory,
+        )
+
+        enstrophy = load_enstrophy(
             arguments.case,
             case_directory=arguments.case_directory,
         )
     except StatisticsFormatError as error:
-        parser.exit(status=1, message=f"error: {error}\n")
+        parser.exit(
+            status=1,
+            message=f"error: {error}\n",
+        )
 
-    _print_summary(history)
+    if not np.array_equal(energy.step, enstrophy.step):
+        parser.exit(
+            status=1,
+            message=(
+                "error: kinetic-energy and enstrophy histories "
+                "do not use the same sample steps\n"
+            ),
+        )
+
+    _print_summary(energy, enstrophy)
+
     return 0
 
 

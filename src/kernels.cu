@@ -4,6 +4,7 @@
 #include "lbmf.cuh"
 
 #include "statistics/kineticEnergy.cuh"
+#include "statistics/enstrophy.cuh"
 #include "statistics/reduction.cuh"
 #include "statistics/statisticsMemory.cuh"
 
@@ -59,6 +60,36 @@ __global__ void kineticEnergyPartialsKernel(const __grid_constant__ MomentState 
     {
         const label_t id = physicalNodeIndex(secondPhysicalId);
         localSum += kineticEnergy(state.ux[id], state.uy[id], state.uz[id]);
+    }
+
+    const statistics_t blockSum = blockReduceSum(localSum);
+
+    if (threadIdx.x == static_cast<unsigned int>(0))
+    {
+        partials[blockIdx.x] = blockSum;
+    }
+}
+
+// ============================================================
+// Enstrophy partial sums
+// ============================================================
+
+__global__ void enstrophyPartialsKernel(const __grid_constant__ MomentState state, statistics_t *partials)
+{
+    const std::size_t blockStart = static_cast<std::size_t>(blockIdx.x) * statisticsNodesPerBlock;
+    const std::size_t firstPhysicalId = blockStart + static_cast<std::size_t>(threadIdx.x);
+    const std::size_t secondPhysicalId = firstPhysicalId + static_cast<std::size_t>(statisticsBlockSize);
+
+    statistics_t localSum = static_cast<statistics_t>(0);
+
+    if (firstPhysicalId < Nphysical)
+    {
+        localSum += enstrophy(firstPhysicalId, state);
+    }
+
+    if (secondPhysicalId < Nphysical)
+    {
+        localSum += enstrophy(secondPhysicalId, state);
     }
 
     const statistics_t blockSum = blockReduceSum(localSum);

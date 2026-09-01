@@ -41,4 +41,4 @@ __host__ __device__ [[nodiscard]] constexpr __forceinline__ label_t physicalNode
 static_assert(physicalNodeIndex(static_cast<std::size_t>(0)) == idx(static_cast<label_t>(1), static_cast<label_t>(1), static_cast<label_t>(1)));
 static_assert(physicalNodeIndex(Nphysical - static_cast<std::size_t>(1)) == idx(NXPhysical, NYPhysical, NZPhysical));
 
-#endif // KINETIC_ENERGY_CUH
+#endif

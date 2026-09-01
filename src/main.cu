@@ -33,13 +33,25 @@ int main()
 
     const CudaConfig cfg = print_device_and_make_config(deviceID);
 
+    // ============================================================
+    // Solver memory
+    // ============================================================
+
     Memory memory;
 
     allocateMemory(memory);
 
+    // ============================================================
+    // Statistics memory
+    // ============================================================
+
     StatisticsMemory statisticsMemory;
 
     allocateStatisticsMemory(statisticsMemory);
+
+    // ============================================================
+    // MLUPS counter
+    // ============================================================
 
     MlupsCounter mlupsCounter;
 
@@ -51,6 +63,10 @@ int main()
 
     try
     {
+        // ========================================================
+        // Taylor-Green statistics output
+        // ========================================================
+
         TaylorGreenStatisticsOutput statisticsOutput;
 
         initializeTaylorGreenStatisticsOutput(statisticsOutput);
@@ -73,12 +89,12 @@ int main()
         MomentState *B = &memory.d_B;
 
         // ========================================================
-        // Taylor-Green statistics at t = 0
+        // Taylor-Green kinetic energy at t = 0
         // ========================================================
 
         const statistics_t initialKineticEnergySum = launchKineticEnergyStatistics(*A, statisticsMemory);
         const statistics_t initialKineticEnergyStar = taylorGreenKineticEnergyStar(initialKineticEnergySum);
-        const statistics_t initialRelativeError = taylorGreenInitialKineticEnergyRelativeError(initialKineticEnergyStar);
+        const statistics_t initialKineticEnergyRelativeError = taylorGreenInitialKineticEnergyRelativeError(initialKineticEnergyStar);
 
         writeTaylorGreenKineticEnergy(statisticsOutput, static_cast<label_t>(0), initialKineticEnergySum);
 
@@ -87,10 +103,35 @@ int main()
                   << "SK        = " << initialKineticEnergySum << "\n"
                   << "SK exact  = " << tgvExpectedKineticEnergySum << "\n"
                   << "KStar     = " << initialKineticEnergyStar << "\n"
-                  << "rel error = " << initialRelativeError << "\n";
+                  << "rel error = " << initialKineticEnergyRelativeError << "\n";
 
-        // Write the initialized state at the actual simulation time t = 0.
+        // ========================================================
+        // Taylor-Green enstrophy at t = 0
+        // ========================================================
+
+        const statistics_t initialEnstrophySum = launchEnstrophyStatistics(*A, statisticsMemory);
+        const statistics_t initialEnstrophyStar = taylorGreenEnstrophyStar(initialEnstrophySum);
+        const statistics_t expectedInitialEnstrophySum = taylorGreenExpectedInitialEnstrophySumFD();
+        const statistics_t expectedInitialEnstrophyStar = taylorGreenExpectedInitialEnstrophyStarFD();
+        const statistics_t initialEnstrophyRelativeError = taylorGreenInitialEnstrophyRelativeError(initialEnstrophyStar);
+
+        writeTaylorGreenEnstrophy(statisticsOutput, static_cast<label_t>(0), initialEnstrophySum);
+
+        std::cout << std::setprecision(std::numeric_limits<statistics_t>::max_digits10)
+                  << "Taylor-Green step-0 enstrophy validation\n"
+                  << "Szeta         = " << initialEnstrophySum << "\n"
+                  << "Szeta exact   = " << expectedInitialEnstrophySum << "\n"
+                  << "ZetaStar      = " << initialEnstrophyStar << "\n"
+                  << "ZetaStar FD   = " << expectedInitialEnstrophyStar << "\n"
+                  << "ZetaStar cont = " << static_cast<statistics_t>(3.0 / 8.0) << "\n"
+                  << "rel error     = " << initialEnstrophyRelativeError << "\n";
+
+        // ========================================================
+        // Initial VTI output
+        // ========================================================
+
         copyDeviceToHost(memory.host, *A);
+
         writeTaylorGreenVTI(memory.host, static_cast<label_t>(0));
 
         // ========================================================
@@ -99,10 +140,18 @@ int main()
 
         for (label_t step = static_cast<label_t>(0); step < Steps; ++step)
         {
+            // ====================================================
+            // MLUPS timer start
+            // ====================================================
+
             if (step % mlupsEvery == static_cast<label_t>(0))
             {
                 startMlupsCounter(mlupsCounter);
             }
+
+            // ====================================================
+            // LBM evolution
+            // ====================================================
 
             launchLBM(cfg, *A, *B);
 
@@ -112,21 +161,39 @@ int main()
 
             // launchChannelBoundaryConditions(cfg, *A, *B);
 
+            // ====================================================
+            // A-B swap
+            // ====================================================
+
             std::swap(A, B);
 
             const label_t completedStep = step + static_cast<label_t>(1);
+
+            // ====================================================
+            // MLUPS output
+            // ====================================================
 
             if (completedStep % mlupsEvery == static_cast<label_t>(0))
             {
                 printMlups(mlupsCounter, completedStep);
             }
 
+            // ====================================================
+            // Taylor-Green statistics
+            // ====================================================
+
             if (statisticsSampleDue<statisticsStart, statisticsEvery>(completedStep))
             {
                 const statistics_t kineticEnergySum = launchKineticEnergyStatistics(*A, statisticsMemory);
+                const statistics_t enstrophySum = launchEnstrophyStatistics(*A, statisticsMemory);
 
                 writeTaylorGreenKineticEnergy(statisticsOutput, completedStep, kineticEnergySum);
+                writeTaylorGreenEnstrophy(statisticsOutput, completedStep, enstrophySum);
             }
+
+            // ====================================================
+            // VTI output
+            // ====================================================
 
             if (completedStep % output == static_cast<label_t>(0))
             {
@@ -140,13 +207,22 @@ int main()
             }
         }
 
+        // ========================================================
+        // Close Taylor-Green statistics
+        // ========================================================
+
         closeTaylorGreenStatisticsOutput(statisticsOutput);
     }
     catch (const std::exception &error)
     {
         std::cerr << error.what() << "\n";
+
         exitCode = EXIT_FAILURE;
     }
+
+    // ============================================================
+    // Cleanup
+    // ============================================================
 
     CUDA_CHECK(cudaDeviceSynchronize());
 
