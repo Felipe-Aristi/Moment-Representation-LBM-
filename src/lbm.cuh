@@ -233,10 +233,10 @@ __device__ __forceinline__ void lbm(const label_t x, const label_t y, const labe
         // ====================================================
 
         // Jet: periodic x and z
-        const label_t pullID = pullidPeriXZ<i>(x, y, z);
+        // const label_t pullID = pullidPeriXZ<i>(x, y, z);
 
         // Taylor-Green vortex: periodic x, y and z
-        // const label_t pullID = pullidPeriXYZ<i>(x, y, z);
+        const label_t pullID = pullidPeriXYZ<i>(x, y, z);
 
 
 

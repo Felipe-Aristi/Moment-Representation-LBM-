@@ -19,6 +19,25 @@ __host__ __forceinline__ void launchTaylorGreenInitialization(const CudaConfig &
 }
 
 // ============================================================
+// Kinetic-energy statistics
+// ============================================================
+
+__host__ __forceinline__ statistics_t launchKineticEnergyStatistics(const MomentState &state, StatisticsMemory &statistics) noexcept
+{
+    kineticEnergyPartialsKernel<<<static_cast<unsigned int>(statisticsPartialCount), statisticsBlockSize>>>(state, statistics.d_partials);
+
+    CUDA_CHECK(cudaGetLastError());
+
+    statisticsFinalReductionKernel<<<static_cast<unsigned int>(1), statisticsBlockSize>>>(statistics.d_partials, statistics.d_result);
+
+    CUDA_CHECK(cudaGetLastError());
+
+    CUDA_CHECK(cudaMemcpy(&statistics.hostResult, statistics.d_result, sizeof(statistics_t), cudaMemcpyDeviceToHost));
+
+    return statistics.hostResult;
+}
+
+// ============================================================
 // Jet initialization
 // ============================================================
 

@@ -4,6 +4,7 @@
 #include <cstdint>
 
 using real_t = float;
+using statistics_t = float;
 using label_t = uint32_t;
 
 #endif

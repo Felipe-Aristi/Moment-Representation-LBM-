@@ -10,7 +10,7 @@
 #include "types.cuh"
 
 inline constexpr label_t mlupsEvery = static_cast<label_t>(100);
-inline constexpr std::size_t Nfluid = static_cast<std::size_t>(NX - static_cast<label_t>(2)) * static_cast<std::size_t>(NY - static_cast<label_t>(2)) * static_cast<std::size_t>(NZ - static_cast<label_t>(2));
+inline constexpr std::size_t Nfluid = Nphysical;
 
 // ============================================================
 // MLUPS counter

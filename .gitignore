@@ -8,6 +8,10 @@
 *.pvti
 *.pvd
 
+/output/
+/post/taylorgreen/validation/data/
+/post/taylorgreen/validation/plots/
+
 # ============================================================
 # Compiled executable
 # ============================================================

@@ -16,9 +16,17 @@ inline constexpr label_t blockZ = static_cast<label_t>(4);
 // Grid
 // ============================================================
 
-inline constexpr label_t NX = static_cast<label_t>(402);
-inline constexpr label_t NY = static_cast<label_t>(65);
-inline constexpr label_t NZ = static_cast<label_t>(202);
+inline constexpr label_t NX = static_cast<label_t>(130);
+inline constexpr label_t NY = static_cast<label_t>(130);
+inline constexpr label_t NZ = static_cast<label_t>(130);
+
+static_assert(NX > static_cast<label_t>(2) && NY > static_cast<label_t>(2) && NZ > static_cast<label_t>(2));
+
+inline constexpr label_t NXPhysical = NX - static_cast<label_t>(2);
+inline constexpr label_t NYPhysical = NY - static_cast<label_t>(2);
+inline constexpr label_t NZPhysical = NZ - static_cast<label_t>(2);
+
+inline constexpr std::size_t Nphysical = static_cast<std::size_t>(NXPhysical) * static_cast<std::size_t>(NYPhysical) * static_cast<std::size_t>(NZPhysical);
 
 inline constexpr label_t NXNY = NX * NY;
 inline constexpr label_t Ncells = NX * NY * NZ;
@@ -27,11 +35,13 @@ inline constexpr label_t Ncells = NX * NY * NZ;
 // Simulation control
 // ============================================================
 
-inline constexpr label_t Steps = static_cast<label_t>(1000000);
-inline constexpr label_t output = static_cast<label_t>(2000);
+inline constexpr label_t Steps = static_cast<label_t>(8200);
+inline constexpr label_t output = static_cast<label_t>(500);
 
-inline constexpr label_t statisticsStart = static_cast<label_t>(7000);
-inline constexpr label_t statisticsEvery = static_cast<label_t>(1);
+inline constexpr label_t statisticsStart = static_cast<label_t>(0);
+inline constexpr label_t statisticsEvery = static_cast<label_t>(5);
+
+static_assert(statisticsEvery > static_cast<label_t>(0));
 
 // ============================================================
 // Velocity set D3Q27
@@ -93,9 +103,9 @@ inline constexpr real_t rho0 = static_cast<real_t>(1);
 // Taylor-Green vortex parameters
 // ============================================================
 
-inline constexpr label_t tgv_NX = NX - static_cast<label_t>(2);
-inline constexpr label_t tgv_NY = NY - static_cast<label_t>(2);
-inline constexpr label_t tgv_NZ = NZ - static_cast<label_t>(2);
+inline constexpr label_t tgv_NX = NXPhysical;
+inline constexpr label_t tgv_NY = NYPhysical;
+inline constexpr label_t tgv_NZ = NZPhysical;
 
 inline constexpr real_t tgv_U0 = static_cast<real_t>(0.05);
 
@@ -164,7 +174,7 @@ inline constexpr real_t channel_kz = static_cast<real_t>(2) * pi / static_cast<r
 // Channel:
 // inline constexpr real_t nu = channel_nu;
 
-inline constexpr real_t nu = channel_nu;
+inline constexpr real_t nu = tgv_nu;
 
 inline constexpr real_t tau = static_cast<real_t>(0.5) + nu / cs2;
 inline constexpr real_t omega = static_cast<real_t>(1) / tau;
