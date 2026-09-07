@@ -4,6 +4,10 @@
 #include <cstddef>
 #include "utilities/types.cuh"
 
+#ifdef MRLBM_MHD
+#include "../cases/MHD/config.cuh"
+#endif
+
 // ============================================================
 // CUDA block dimensions
 // ============================================================
@@ -16,9 +20,15 @@ inline constexpr label_t blockZ = static_cast<label_t>(4);
 // Grid
 // ============================================================
 
+#ifdef MRLBM_MHD
+inline constexpr label_t NX = mhd::nx + 2;
+inline constexpr label_t NY = mhd::ny + 2;
+inline constexpr label_t NZ = mhd::nz + 2;
+#else
 inline constexpr label_t NX = static_cast<label_t>(130);
 inline constexpr label_t NY = static_cast<label_t>(130);
 inline constexpr label_t NZ = static_cast<label_t>(130);
+#endif
 
 static_assert(NX > static_cast<label_t>(2) && NY > static_cast<label_t>(2) && NZ > static_cast<label_t>(2));
 
@@ -35,8 +45,13 @@ inline constexpr label_t Ncells = NX * NY * NZ;
 // Simulation control
 // ============================================================
 
+#ifdef MRLBM_MHD
+inline constexpr label_t Steps = mhd::steps;
+inline constexpr label_t output = mhd::outputEvery;
+#else
 inline constexpr label_t Steps = static_cast<label_t>(8200);
 inline constexpr label_t output = static_cast<label_t>(500);
+#endif
 
 inline constexpr label_t statisticsStart = static_cast<label_t>(0);
 inline constexpr label_t statisticsEvery = static_cast<label_t>(5);
@@ -174,10 +189,18 @@ inline constexpr real_t channel_kz = static_cast<real_t>(2) * pi / static_cast<r
 // Channel:
 // inline constexpr real_t nu = channel_nu;
 
+#ifdef MRLBM_MHD
+inline constexpr real_t nu = mhd::viscosity;
+#else
 inline constexpr real_t nu = tgv_nu;
+#endif
 
 inline constexpr real_t tau = static_cast<real_t>(0.5) + nu / cs2;
 inline constexpr real_t omega = static_cast<real_t>(1) / tau;
 inline constexpr real_t oms = static_cast<real_t>(1) - omega;
+
+#ifdef MRLBM_MHD
+static_assert(tau > static_cast<real_t>(0.5), "Fluid relaxation time must be representably greater than 0.5.");
+#endif
 
 #endif
