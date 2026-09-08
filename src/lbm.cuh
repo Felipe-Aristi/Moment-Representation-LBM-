@@ -238,8 +238,6 @@ __device__ __forceinline__ void lbm(const label_t x, const label_t y, const labe
         // Taylor-Green vortex: periodic x, y and z
         const label_t pullID = pullidPeriXYZ<i>(x, y, z);
 
-
-
         const real_t rho_s = rhoA[pullID];
 
         const real_t ux_s = uxA[pullID];

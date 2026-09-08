@@ -62,8 +62,12 @@ inline constexpr statistics_t tgvEnstrophyNormalization = static_cast<statistics
 [[nodiscard]] inline statistics_t taylorGreenExpectedInitialEnstrophyStarFD() noexcept
 {
     const statistics_t k = static_cast<statistics_t>(tgv_kx);
-    const statistics_t modifiedWavenumber = std::sin(k);
+
+    const statistics_t modifiedWavenumber =
+        (static_cast<statistics_t>(8) * std::sin(k) - std::sin(static_cast<statistics_t>(2) * k)) / static_cast<statistics_t>(6);
+
     const statistics_t ratio = modifiedWavenumber / k;
+
     return static_cast<statistics_t>(3.0 / 8.0) * ratio * ratio;
 }
 
@@ -196,7 +200,7 @@ inline void writeTaylorGreenStatisticsMetadata()
              << "record_bytes " << tgvStatisticsRecordBytes << '\n'
              << "kinetic_energy_definition half_velocity_squared_sum\n"
              << "enstrophy_definition half_vorticity_squared_sum\n"
-             << "vorticity_derivative central_second_order\n"
+             << "vorticity_derivative central_fourth_order\n"
              << "grid_spacing 1\n";
 
     if (!metadata)

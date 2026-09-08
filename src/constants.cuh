@@ -16,9 +16,9 @@ inline constexpr label_t blockZ = static_cast<label_t>(4);
 // Grid
 // ============================================================
 
-inline constexpr label_t NX = static_cast<label_t>(130);
-inline constexpr label_t NY = static_cast<label_t>(130);
-inline constexpr label_t NZ = static_cast<label_t>(130);
+inline constexpr label_t NX = static_cast<label_t>(258);
+inline constexpr label_t NY = static_cast<label_t>(258);
+inline constexpr label_t NZ = static_cast<label_t>(258);
 
 static_assert(NX > static_cast<label_t>(2) && NY > static_cast<label_t>(2) && NZ > static_cast<label_t>(2));
 
@@ -35,11 +35,11 @@ inline constexpr label_t Ncells = NX * NY * NZ;
 // Simulation control
 // ============================================================
 
-inline constexpr label_t Steps = static_cast<label_t>(8200);
-inline constexpr label_t output = static_cast<label_t>(500);
+inline constexpr label_t Steps = static_cast<label_t>(16400);
+inline constexpr label_t output = static_cast<label_t>(1000);
 
 inline constexpr label_t statisticsStart = static_cast<label_t>(0);
-inline constexpr label_t statisticsEvery = static_cast<label_t>(5);
+inline constexpr label_t statisticsEvery = static_cast<label_t>(2);
 
 static_assert(statisticsEvery > static_cast<label_t>(0));
 
