@@ -71,32 +71,12 @@ __device__ __forceinline__ real_t fstarMHD(const real_t rho, const real_t ux, co
     const real_t fieqmhd = feqmhd<I>(ux, uy, uz, bx, by, bz, cu, cB);
     const real_t fineq = fneqr<I>(ux, uy, uz, pixx, pixy, pixz, piyy, piyz, pizz, cu);
 
-    return fieq + fieqmhd + oms * fineq;
+    return fieq + fieqmhd + mhd_omsF  * fineq;
 }
 
-template <label_t I>
-__device__ __forceinline__ MagneticPDF gstarMHD(const real_t ux, const real_t uy, const real_t uz,
-                                                const real_t bx, const real_t by, const real_t bz,
-                                                const real_t cu, const real_t cB,
-                                                const MagneticState &magneticA,
-                                                const label_t pullID) noexcept
-{
-    const MagneticPDF geq = geqmhd<I>(ux, uy, uz, bx, by, bz, cu, cB);
-    const MagneticPDF gneq = magneticGneqSource<I>(magneticA, pullID);
 
-    MagneticPDF g{};
-
-    g.x = geq.x + omsM * gneq.x;
-    g.y = geq.y + omsM * gneq.y;
-    g.z = geq.z + omsM * gneq.z;
-
-    return g;
-}
 // ============================================================
 // Magnetic non-equilibrium source reconstruction
-//
-// D3Q7 has only one non-zero Cartesian component per
-// moving direction, therefore only one row of A^neq is loaded.
 // ============================================================
 
 template <label_t I>
@@ -128,6 +108,26 @@ __device__ __forceinline__ MagneticPDF magneticGneqSource(const MagneticState &s
     {
         return {};
     }
+}
+
+
+template <label_t I>
+__device__ __forceinline__ MagneticPDF gstarMHD(const real_t ux, const real_t uy, const real_t uz,
+                                                const real_t bx, const real_t by, const real_t bz,
+                                                const real_t cu, const real_t cB,
+                                                const MagneticState &magneticA,
+                                                const label_t pullID) noexcept
+{
+    const MagneticPDF geq = geqmhd<I>(ux, uy, uz, bx, by, bz, cu, cB);
+    const MagneticPDF gneq = magneticGneqSource<I>(magneticA, pullID);
+
+    MagneticPDF g{};
+
+    g.x = geq.x + mhd_omsM  * gneq.x;
+    g.y = geq.y + mhd_omsM  * gneq.y;
+    g.z = geq.z + mhd_omsM  * gneq.z;
+
+    return g;
 }
 
 // ============================================================

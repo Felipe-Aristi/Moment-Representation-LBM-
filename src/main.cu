@@ -25,6 +25,9 @@
 
 #include "../cases/taylorgreen/statistics.cuh"
 
+#include "../cases/MHD/magneticMemory.cuh"
+#include "../post/MHD/vti.cuh"
+
 int main()
 {
     constexpr int deviceID = 0;
@@ -41,13 +44,16 @@ int main()
 
     allocateMemory(memory);
 
+    MagneticMemory magneticMemory;
+    allocateMagneticMemory(magneticMemory);
+
     // ============================================================
     // Statistics memory
     // ============================================================
 
-    StatisticsMemory statisticsMemory;
+    // StatisticsMemory statisticsMemory;
 
-    allocateStatisticsMemory(statisticsMemory);
+    // allocateStatisticsMemory(statisticsMemory);
 
     // ============================================================
     // MLUPS counter
@@ -67,19 +73,21 @@ int main()
         // Taylor-Green statistics output
         // ========================================================
 
-        TaylorGreenStatisticsOutput statisticsOutput;
+        // TaylorGreenStatisticsOutput statisticsOutput;
 
-        initializeTaylorGreenStatisticsOutput(statisticsOutput);
+        // initializeTaylorGreenStatisticsOutput(statisticsOutput);
 
         // ========================================================
         // Initialization
         // ========================================================
 
-        launchTaylorGreenInitialization(cfg, memory.d_A);
+        // launchTaylorGreenInitialization(cfg, memory.d_A);
 
         // launchJetInitialization(cfg, memory.d_A);
 
         // launchChannelFlowInitialization(cfg, memory.d_A);
+
+        launchOrszagTangInitialization(cfg, memory.d_A, magneticMemory.d_A);
 
         // ========================================================
         // A-B flip-flop pointers
@@ -88,51 +96,56 @@ int main()
         MomentState *A = &memory.d_A;
         MomentState *B = &memory.d_B;
 
+        MagneticState *magneticA = &magneticMemory.d_A;
+        MagneticState *magneticB = &magneticMemory.d_B;
+
         // ========================================================
         // Taylor-Green kinetic energy at t = 0
         // ========================================================
 
-        const statistics_t initialKineticEnergySum = launchKineticEnergyStatistics(*A, statisticsMemory);
-        const statistics_t initialKineticEnergyStar = taylorGreenKineticEnergyStar(initialKineticEnergySum);
-        const statistics_t initialKineticEnergyRelativeError = taylorGreenInitialKineticEnergyRelativeError(initialKineticEnergyStar);
+        // const statistics_t initialKineticEnergySum = launchKineticEnergyStatistics(*A, statisticsMemory);
+        // const statistics_t initialKineticEnergyStar = taylorGreenKineticEnergyStar(initialKineticEnergySum);
+        // const statistics_t initialKineticEnergyRelativeError = taylorGreenInitialKineticEnergyRelativeError(initialKineticEnergyStar);
 
-        writeTaylorGreenKineticEnergy(statisticsOutput, static_cast<label_t>(0), initialKineticEnergySum);
+        // writeTaylorGreenKineticEnergy(statisticsOutput, static_cast<label_t>(0), initialKineticEnergySum);
 
-        std::cout << std::setprecision(std::numeric_limits<statistics_t>::max_digits10)
-                  << "Taylor-Green step-0 kinetic-energy validation\n"
-                  << "SK        = " << initialKineticEnergySum << "\n"
-                  << "SK exact  = " << tgvExpectedKineticEnergySum << "\n"
-                  << "KStar     = " << initialKineticEnergyStar << "\n"
-                  << "rel error = " << initialKineticEnergyRelativeError << "\n";
+        // std::cout << std::setprecision(std::numeric_limits<statistics_t>::max_digits10)
+        //           << "Taylor-Green step-0 kinetic-energy validation\n"
+        //           << "SK        = " << initialKineticEnergySum << "\n"
+        //           << "SK exact  = " << tgvExpectedKineticEnergySum << "\n"
+        //           << "KStar     = " << initialKineticEnergyStar << "\n"
+        //           << "rel error = " << initialKineticEnergyRelativeError << "\n";
 
         // ========================================================
         // Taylor-Green enstrophy at t = 0
         // ========================================================
 
-        const statistics_t initialEnstrophySum = launchEnstrophyStatistics(*A, statisticsMemory);
-        const statistics_t initialEnstrophyStar = taylorGreenEnstrophyStar(initialEnstrophySum);
-        const statistics_t expectedInitialEnstrophySum = taylorGreenExpectedInitialEnstrophySumFD();
-        const statistics_t expectedInitialEnstrophyStar = taylorGreenExpectedInitialEnstrophyStarFD();
-        const statistics_t initialEnstrophyRelativeError = taylorGreenInitialEnstrophyRelativeError(initialEnstrophyStar);
+        // const statistics_t initialEnstrophySum = launchEnstrophyStatistics(*A, statisticsMemory);
+        // const statistics_t initialEnstrophyStar = taylorGreenEnstrophyStar(initialEnstrophySum);
+        // const statistics_t expectedInitialEnstrophySum = taylorGreenExpectedInitialEnstrophySumFD();
+        // const statistics_t expectedInitialEnstrophyStar = taylorGreenExpectedInitialEnstrophyStarFD();
+        // const statistics_t initialEnstrophyRelativeError = taylorGreenInitialEnstrophyRelativeError(initialEnstrophyStar);
 
-        writeTaylorGreenEnstrophy(statisticsOutput, static_cast<label_t>(0), initialEnstrophySum);
+        // writeTaylorGreenEnstrophy(statisticsOutput, static_cast<label_t>(0), initialEnstrophySum);
 
-        std::cout << std::setprecision(std::numeric_limits<statistics_t>::max_digits10)
-                  << "Taylor-Green step-0 enstrophy validation\n"
-                  << "Szeta         = " << initialEnstrophySum << "\n"
-                  << "Szeta exact   = " << expectedInitialEnstrophySum << "\n"
-                  << "ZetaStar      = " << initialEnstrophyStar << "\n"
-                  << "ZetaStar FD   = " << expectedInitialEnstrophyStar << "\n"
-                  << "ZetaStar cont = " << static_cast<statistics_t>(3.0 / 8.0) << "\n"
-                  << "rel error     = " << initialEnstrophyRelativeError << "\n";
+        // std::cout << std::setprecision(std::numeric_limits<statistics_t>::max_digits10)
+        //           << "Taylor-Green step-0 enstrophy validation\n"
+        //           << "Szeta         = " << initialEnstrophySum << "\n"
+        //           << "Szeta exact   = " << expectedInitialEnstrophySum << "\n"
+        //           << "ZetaStar      = " << initialEnstrophyStar << "\n"
+        //           << "ZetaStar FD   = " << expectedInitialEnstrophyStar << "\n"
+        //           << "ZetaStar cont = " << static_cast<statistics_t>(3.0 / 8.0) << "\n"
+        //           << "rel error     = " << initialEnstrophyRelativeError << "\n";
 
         // ========================================================
         // Initial VTI output
         // ========================================================
 
         copyDeviceToHost(memory.host, *A);
+        copyMagneticDeviceToHost(magneticMemory.host, *magneticA);
 
-        writeTaylorGreenVTI(memory.host, static_cast<label_t>(0));
+        // writeTaylorGreenVTI(memory.host, static_cast<label_t>(0));
+        writeOrszagTangVTI(memory.host, magneticMemory.host, static_cast<label_t>(0));
 
         // ========================================================
         // Time evolution
@@ -153,7 +166,7 @@ int main()
             // LBM evolution
             // ====================================================
 
-            launchLBM(cfg, *A, *B);
+            // launchLBM(cfg, *A, *B);
 
             // launchJetBoundaryConditions(cfg, *A, *B);
 
@@ -161,11 +174,14 @@ int main()
 
             // launchChannelBoundaryConditions(cfg, *A, *B);
 
+            launchLBMMHD(cfg, *A, *B, *magneticA, *magneticB);
+
             // ====================================================
             // A-B swap
             // ====================================================
 
             std::swap(A, B);
+            std::swap(magneticA, magneticB);
 
             const label_t completedStep = step + static_cast<label_t>(1);
 
@@ -182,14 +198,14 @@ int main()
             // Taylor-Green statistics
             // ====================================================
 
-            if (statisticsSampleDue<statisticsStart, statisticsEvery>(completedStep))
-            {
-                const statistics_t kineticEnergySum = launchKineticEnergyStatistics(*A, statisticsMemory);
-                const statistics_t enstrophySum = launchEnstrophyStatistics(*A, statisticsMemory);
+            // if (statisticsSampleDue<statisticsStart, statisticsEvery>(completedStep))
+            // {
+            //     const statistics_t kineticEnergySum = launchKineticEnergyStatistics(*A, statisticsMemory);
+            //     const statistics_t enstrophySum = launchEnstrophyStatistics(*A, statisticsMemory);
 
-                writeTaylorGreenKineticEnergy(statisticsOutput, completedStep, kineticEnergySum);
-                writeTaylorGreenEnstrophy(statisticsOutput, completedStep, enstrophySum);
-            }
+            //     writeTaylorGreenKineticEnergy(statisticsOutput, completedStep, kineticEnergySum);
+            //     writeTaylorGreenEnstrophy(statisticsOutput, completedStep, enstrophySum);
+            // }
 
             // ====================================================
             // VTI output
@@ -198,8 +214,12 @@ int main()
             if (completedStep % output == static_cast<label_t>(0))
             {
                 copyDeviceToHost(memory.host, *A);
+                
+                copyMagneticDeviceToHost(magneticMemory.host, *magneticA);
 
-                writeTaylorGreenVTI(memory.host, completedStep);
+                writeOrszagTangVTI(memory.host, magneticMemory.host, completedStep);
+
+                // writeTaylorGreenVTI(memory.host, completedStep);
 
                 // writeJetVTI(memory.host, completedStep);
 
@@ -211,7 +231,7 @@ int main()
         // Close Taylor-Green statistics
         // ========================================================
 
-        closeTaylorGreenStatisticsOutput(statisticsOutput);
+        // closeTaylorGreenStatisticsOutput(statisticsOutput);
     }
     catch (const std::exception &error)
     {
@@ -228,9 +248,10 @@ int main()
 
     destroyMlupsCounter(mlupsCounter);
 
-    freeStatisticsMemory(statisticsMemory);
+    // freeStatisticsMemory(statisticsMemory);
 
     freeMemory(memory);
+    freeMagneticMemory(magneticMemory);
 
     CUDA_CHECK(cudaDeviceReset());
 

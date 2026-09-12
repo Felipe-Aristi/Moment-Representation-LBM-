@@ -3,6 +3,11 @@
 
 #include "memory.cuh"
 #include "statistics/statisticsMemory.cuh"
+#include "../cases/MHD/magneticMemory.cuh"
+
+// ============================================================
+// MR
+// ============================================================
 
 __global__ void initializeTaylorGreenKernel(MomentState state);
 
@@ -25,5 +30,14 @@ __global__ void channelBoundaryConditionsKernel(const __grid_constant__ MomentSt
 __global__ void lbmKernel(const __grid_constant__ MomentState A, const __grid_constant__ MomentState B);
 
 __global__ void lbmfKernel(const __grid_constant__ MomentState A, const __grid_constant__ MomentState B);
+
+// ============================================================
+// MR-MHD
+// ============================================================
+
+__global__ void initializeOrszagTangKernel(MomentState fluid, MagneticState magnetic);
+
+__global__ void lbmmhdKernel(const __grid_constant__ MomentState fluidA, const __grid_constant__ MomentState fluidB,
+                             const __grid_constant__ MagneticState magneticA, const __grid_constant__ MagneticState magneticB);
 
 #endif

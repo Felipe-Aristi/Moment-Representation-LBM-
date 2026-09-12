@@ -35,7 +35,7 @@ inline constexpr label_t Ncells = NX * NY * NZ;
 // Simulation control
 // ============================================================
 
-inline constexpr label_t Steps = static_cast<label_t>(16400);
+inline constexpr label_t Steps = static_cast<label_t>(200000);
 inline constexpr label_t output = static_cast<label_t>(1000);
 
 inline constexpr label_t statisticsStart = static_cast<label_t>(0);

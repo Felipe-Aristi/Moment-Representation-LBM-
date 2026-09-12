@@ -64,7 +64,7 @@ __device__ __forceinline__ void initializeOrszagTang(const label_t x, const labe
     // Initial fluid non-equilibrium stress
     // ========================================================
 
-    const real_t stressFactor = -rho * cs2 * tau;
+    const real_t stressFactor = -rho * cs2 * mhd_tauF;
 
     const real_t pixx = static_cast<real_t>(2) * stressFactor * duxdx;
     const real_t pixy = stressFactor * (duxdy + duydx);
@@ -90,7 +90,7 @@ __device__ __forceinline__ void initializeOrszagTang(const label_t x, const labe
     // A_alpha_beta^neq = -tauM cs_m^2 d_alpha B_beta
     // ========================================================
 
-    const real_t magneticFactor = -tauM * mhd_cs2;
+    const real_t magneticFactor = -mhd_tauM * mhd_cs2;
 
     const real_t axx = magneticFactor * dbxdx;
     const real_t axy = magneticFactor * dbydx;

@@ -20,6 +20,9 @@
 #include "../cases/channelflow/initialization.cuh"
 #include "../cases/channelflow/boundary_conditions.cuh"
 
+#include "../cases/MHD/initialization.cuh"
+#include "../cases/MHD/lbmmhd.cuh"
+
 // ============================================================
 // Taylor-Green initialization kernel
 // ============================================================
@@ -239,4 +242,42 @@ __global__ void lbmfKernel(const __grid_constant__ MomentState A, const __grid_c
     }
 
     lbmf(x, y, z, A, B);
+}
+
+
+// ============================================================
+// Orszag-Tang initialization kernel
+// ============================================================
+
+__global__ void initializeOrszagTangKernel(MomentState fluid, MagneticState magnetic)
+{
+    const label_t x = static_cast<label_t>(blockIdx.x * blockDim.x + threadIdx.x);
+    const label_t y = static_cast<label_t>(blockIdx.y * blockDim.y + threadIdx.y);
+    const label_t z = static_cast<label_t>(blockIdx.z * blockDim.z + threadIdx.z);
+
+    if (x >= NX || y >= NY || z >= NZ)
+    {
+        return;
+    }
+
+    initializeOrszagTang(x, y, z, fluid, magnetic);
+}
+
+// ============================================================
+// MR-MHD kernel
+// ============================================================
+
+__global__ void lbmmhdKernel(const __grid_constant__ MomentState fluidA, const __grid_constant__ MomentState fluidB,
+                             const __grid_constant__ MagneticState magneticA, const __grid_constant__ MagneticState magneticB)
+{
+    const label_t x = static_cast<label_t>(blockIdx.x * blockDim.x + threadIdx.x);
+    const label_t y = static_cast<label_t>(blockIdx.y * blockDim.y + threadIdx.y);
+    const label_t z = static_cast<label_t>(blockIdx.z * blockDim.z + threadIdx.z);
+
+    if (interior(x, y, z))
+    {
+        return;
+    }
+
+    lbmmhd(x, y, z, fluidA, fluidB, magneticA, magneticB);
 }

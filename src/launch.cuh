@@ -6,6 +6,7 @@
 
 #include "utilities/cudaConfig.cuh"
 #include "utilities/cudaUtilities.cuh"
+#include "../cases/MHD/magneticMemory.cuh"
 
 // ============================================================
 // Taylor-Green initialization
@@ -119,6 +120,28 @@ __host__ __forceinline__ void launchLBM(const CudaConfig &cfg, const MomentState
 __host__ __forceinline__ void launchLBMF(const CudaConfig &cfg, const MomentState &A, MomentState &B) noexcept
 {
     lbmfKernel<<<cfg.grid, cfg.block>>>(A, B);
+
+    CUDA_CHECK(cudaGetLastError());
+}
+
+// ============================================================
+// Orszag-Tang initialization
+// ============================================================
+
+__host__ __forceinline__ void launchOrszagTangInitialization(const CudaConfig &cfg, MomentState &fluid, MagneticState &magnetic) noexcept
+{
+    initializeOrszagTangKernel<<<cfg.grid, cfg.block>>>(fluid, magnetic);
+
+    CUDA_CHECK(cudaGetLastError());
+}
+
+// ============================================================
+// MR-MHD kernel launch
+// ============================================================
+
+__host__ __forceinline__ void launchLBMMHD(const CudaConfig &cfg, const MomentState &fluidA, MomentState &fluidB, const MagneticState &magneticA, MagneticState &magneticB) noexcept
+{
+    lbmmhdKernel<<<cfg.grid, cfg.block>>>(fluidA, fluidB, magneticA, magneticB);
 
     CUDA_CHECK(cudaGetLastError());
 }
