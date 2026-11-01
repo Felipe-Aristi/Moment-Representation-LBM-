@@ -20,6 +20,7 @@ sys.path.insert(0, str(VALIDATION_DIRECTORY))
 
 from prettyPlot import pretty_plot
 from statistics_io import load_kinetic_energy
+from benchmark import REFERENCE_LABEL, load_benchmark
 
 
 INITIAL_KINETIC_ENERGY_STAR = 0.125
@@ -49,38 +50,9 @@ def kinetic_energy_limits(kinetic_energy_star: np.ndarray) -> tuple[float, float
 
 
 def plot_kinetic_energy() -> Path:
-    history = load_kinetic_energy()
-    y_limits = kinetic_energy_limits(history.KStar)
+    from mesh_plots import plot_mesh_comparison
 
-    fig, ax, _ = pretty_plot(
-        xLim=(0.0, 20.0),
-        yLim=y_limits,
-        nxTicks=6,
-        nyTicks=6,
-        xLabel=r"$t^*$",
-        yLabel=r"$K^*$",
-        xTickFormat=0,
-        yTickFormat=3,
-        useGrid=True,
-        plotAspectRatio=(1.5, 1.0, 1.0),
-    )
-
-    ax.plot(
-        history.tStar,
-        history.KStar,
-        color="#0072B2",
-        linestyle="-",
-        linewidth=1.25,
-        label="MR-RR",
-    )
-    ax.legend(frameon=False, loc="best")
-
-    PLOTS_DIRECTORY.mkdir(parents=True, exist_ok=True)
-    output_path = PLOTS_DIRECTORY / "kinetic_energy.png"
-    fig.savefig(output_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-
-    return output_path
+    return plot_mesh_comparison("energy")
 
 
 def main() -> None:

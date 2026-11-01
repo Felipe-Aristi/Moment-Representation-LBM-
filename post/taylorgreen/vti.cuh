@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "../../src/constants.cuh"
+#include "../../cases/taylorgreen/case_name.cuh"
 #include "../../src/memory.cuh"
 #include "../../src/utilities/indexing.cuh"
 #include "../../src/utilities/types.cuh"
@@ -75,7 +76,7 @@ inline void writeTaylorGreenVTI(const HostState &state, const label_t step)
     // ========================================================
 
     std::ostringstream folder;
-    folder << "post/taylorgreen/TG_RE_" << static_cast<label_t>(tgv_Re);
+    folder << "post/taylorgreen/" << taylorGreenCaseName();
 
     std::filesystem::create_directories(folder.str());
 

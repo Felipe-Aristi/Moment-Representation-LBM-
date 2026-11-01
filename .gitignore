@@ -7,6 +7,7 @@
 *.vtu
 *.pvti
 *.pvd
+/post/**/*.png
 
 /output/
 /post/taylorgreen/validation/data/

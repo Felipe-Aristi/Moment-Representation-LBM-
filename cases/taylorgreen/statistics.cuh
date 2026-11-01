@@ -1,3 +1,4 @@
+#include "case_name.cuh"
 #ifndef TAYLORGREEN_STATISTICS_CUH
 #define TAYLORGREEN_STATISTICS_CUH
 
@@ -135,7 +136,7 @@ struct TaylorGreenStatisticsOutput
 
 [[nodiscard]] inline std::filesystem::path taylorGreenStatisticsDirectory()
 {
-    const std::string reynoldsDirectory = "TG_RE_" + std::to_string(static_cast<label_t>(tgv_Re));
+    const std::string reynoldsDirectory = taylorGreenCaseName();
     return std::filesystem::path("post") / "taylorgreen" / "validation" / "data" / reynoldsDirectory;
 }
 

@@ -20,6 +20,7 @@ sys.path.insert(0, str(VALIDATION_DIRECTORY))
 
 from prettyPlot import pretty_plot
 from statistics_io import load_enstrophy
+from benchmark import REFERENCE_LABEL, load_benchmark
 
 
 def enstrophy_limits(enstrophy_star: np.ndarray) -> tuple[float, float]:
@@ -49,69 +50,9 @@ def enstrophy_limits(enstrophy_star: np.ndarray) -> tuple[float, float]:
 
 
 def plot_enstrophy() -> Path:
-    history = load_enstrophy()
+    from mesh_plots import plot_mesh_comparison
 
-    y_limits = enstrophy_limits(history.ZetaStar)
-
-    fig, ax, _ = pretty_plot(
-        xLim=(0.0, 20.0),
-        yLim=y_limits,
-        nxTicks=6,
-        nyTicks=6,
-        xLabel=r"$t^*$",
-        yLabel=r"$\zeta^*$",
-        xTickFormat=0,
-        yTickFormat=2,
-        useGrid=True,
-        plotAspectRatio=(1.5, 1.0, 1.0),
-    )
-
-    ax.plot(
-        history.tStar,
-        history.ZetaStar,
-        color="#0072B2",
-        linestyle="-",
-        linewidth=1.25,
-        label="MR-RR",
-    )
-
-    peak_index = int(np.argmax(history.ZetaStar))
-
-    ax.plot(
-        history.tStar[peak_index],
-        history.ZetaStar[peak_index],
-        marker="o",
-        markersize=4.0,
-        color="#0072B2",
-    )
-
-    ax.legend(
-        frameon=False,
-        loc="best",
-    )
-
-    PLOTS_DIRECTORY.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    output_path = PLOTS_DIRECTORY / "enstrophy.png"
-
-    fig.savefig(
-        output_path,
-        dpi=300,
-        bbox_inches="tight",
-    )
-
-    plt.close(fig)
-
-    print(
-        f"Peak enstrophy: "
-        f"tStar={history.tStar[peak_index]:.17g}, "
-        f"ZetaStar={history.ZetaStar[peak_index]:.17g}"
-    )
-
-    return output_path
+    return plot_mesh_comparison("enstrophy")
 
 
 def main() -> None:

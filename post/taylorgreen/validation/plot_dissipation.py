@@ -19,6 +19,7 @@ sys.path.insert(0, str(POST_DIRECTORY))
 sys.path.insert(0, str(VALIDATION_DIRECTORY))
 
 from prettyPlot import pretty_plot
+from benchmark import REFERENCE_LABEL, load_benchmark
 from statistics_io import (
     load_kinetic_energy,
     load_enstrophy,
@@ -111,119 +112,18 @@ def dissipation_limits(
     )
 
 
-def plot_dissipation() -> Path:
-    (
-        t_star,
-        epsilon_energy,
-        epsilon_enstrophy,
-    ) = compute_dissipation()
+def plot_dissipation() -> tuple[Path, Path]:
+    from mesh_plots import plot_mesh_comparison
 
-    y_limits = dissipation_limits(
-        epsilon_energy,
-        epsilon_enstrophy,
+    return (
+        plot_mesh_comparison("dissipation_energy"),
+        plot_mesh_comparison("dissipation_enstrophy"),
     )
-
-    fig, ax, _ = pretty_plot(
-        xLim=(0.0, 20.0),
-        yLim=y_limits,
-        nxTicks=6,
-        nyTicks=6,
-        xLabel=r"$t^*$",
-        yLabel=r"$\varepsilon^*$",
-        xTickFormat=0,
-        yTickFormat=3,
-        useGrid=True,
-        plotAspectRatio=(1.5, 1.0, 1.0),
-    )
-
-    ax.plot(
-        t_star,
-        epsilon_energy,
-        linestyle="-",
-        linewidth=1.25,
-        label=r"$-\mathrm{d}K^*/\mathrm{d}t^*$",
-    )
-
-    ax.plot(
-        t_star,
-        epsilon_enstrophy,
-        linestyle="--",
-        linewidth=1.25,
-        label=r"$2\zeta^*/Re$",
-    )
-
-    ax.legend(
-        frameon=False,
-        loc="best",
-    )
-
-    PLOTS_DIRECTORY.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    output_path = (
-        PLOTS_DIRECTORY / "dissipation.png"
-    )
-
-    fig.savefig(
-        output_path,
-        dpi=300,
-        bbox_inches="tight",
-    )
-
-    plt.close(fig)
-
-    energy_peak = int(np.argmax(epsilon_energy))
-    enstrophy_peak = int(np.argmax(epsilon_enstrophy))
-
-    print("Energy-based dissipation peak")
-    print(
-        f"step-like sample index: {energy_peak}"
-    )
-    print(
-        f"tStar: {t_star[energy_peak]:.17g}"
-    )
-    print(
-        f"epsilonStar: "
-        f"{epsilon_energy[energy_peak]:.17g}"
-    )
-
-    print()
-    print("Enstrophy-based dissipation peak")
-    print(
-        f"tStar: {t_star[enstrophy_peak]:.17g}"
-    )
-    print(
-        f"epsilonStar: "
-        f"{epsilon_enstrophy[enstrophy_peak]:.17g}"
-    )
-
-    peak_relative_difference = (
-        abs(
-            epsilon_energy[energy_peak]
-            - epsilon_enstrophy[enstrophy_peak]
-        )
-        / epsilon_energy[energy_peak]
-    )
-
-    print()
-    print(
-        "Peak-magnitude relative difference: "
-        f"{peak_relative_difference:.17g}"
-    )
-
-    return output_path
 
 
 def main() -> None:
-    output_path = plot_dissipation()
-
-    print()
-    print(
-        f"Saved Taylor-Green dissipation plot to "
-        f"{output_path}"
-    )
+    for output_path in plot_dissipation():
+        print(f"Saved Taylor-Green dissipation plot to {output_path}")
 
 
 if __name__ == "__main__":
