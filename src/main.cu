@@ -3,9 +3,7 @@
 
 #include <cstdlib>
 #include <exception>
-#include <iomanip>
 #include <iostream>
-#include <limits>
 #include <utility>
 
 #include "constants.cuh"
@@ -13,19 +11,26 @@
 #include "launch.cuh"
 
 #include "statistics/statisticsMemory.cuh"
-#include "statistics/sampling.cuh"
 
 #include "utilities/cudaConfig.cuh"
 #include "utilities/cudaUtilities.cuh"
 #include "utilities/types.cuh"
 #include "utilities/mlups_count.cuh"
 
-#include "../post/taylorgreen/vti.cuh"
-#include "../cases/taylorgreen/statistics.cuh"
+#include "../cases/jet/statistics.cuh"
+#include "../cases/jet/energy_statistics.cuh"
+
+#include "../post/jet/vti.cuh"
 
 int main()
 {
     constexpr int deviceID = 0;
+
+    // ============================================================
+    // Energy monitoring frequency
+    // ============================================================
+
+    constexpr label_t energySampleEvery = static_cast<label_t>(2000);
 
     CUDA_CHECK(cudaSetDevice(deviceID));
 
@@ -39,11 +44,18 @@ int main()
     allocateMemory(memory);
 
     // ============================================================
-    // Statistics memory
+    // Radial statistics memory
     // ============================================================
 
-    StatisticsMemory statisticsMemory;
-    allocateStatisticsMemory(statisticsMemory);
+    JetRadialStatistics jetStatistics;
+    initializeJetRadialStatistics(jetStatistics);
+
+    // ============================================================
+    // Kinetic-energy reduction memory
+    // ============================================================
+
+    StatisticsMemory energyReduction;
+    allocateStatisticsMemory(energyReduction);
 
     // ============================================================
     // MLUPS counter
@@ -58,17 +70,17 @@ int main()
     try
     {
         // ========================================================
-        // Taylor-Green statistics output
+        // Kinetic-energy output
         // ========================================================
 
-        TaylorGreenStatisticsOutput statisticsOutput;
-        initializeTaylorGreenStatisticsOutput(statisticsOutput);
+        JetKineticEnergyHistory energyHistory;
+        initializeJetKineticEnergyHistory(energyHistory);
 
         // ========================================================
-        // Taylor-Green initialization
+        // Turbulent jet initialization
         // ========================================================
 
-        launchTaylorGreenInitialization(cfg, memory.d_A);
+        launchJetInitialization(cfg, memory.d_A);
 
         // ========================================================
         // A-B flip-flop pointers
@@ -81,46 +93,36 @@ int main()
         // Initial kinetic energy
         // ========================================================
 
-        const statistics_t initialKineticEnergySum = launchKineticEnergyStatistics(*A, statisticsMemory);
-        const statistics_t initialKineticEnergyStar = taylorGreenKineticEnergyStar(initialKineticEnergySum);
-        const statistics_t initialKineticEnergyRelativeError = taylorGreenInitialKineticEnergyRelativeError(initialKineticEnergyStar);
+        const statistics_t initialEnergy =
+            launchKineticEnergyStatistics(*A, energyReduction);
 
-        writeTaylorGreenKineticEnergy(statisticsOutput, static_cast<label_t>(0), initialKineticEnergySum);
-
-        std::cout << std::setprecision(std::numeric_limits<statistics_t>::max_digits10)
-                  << "Taylor-Green step-0 kinetic-energy validation\n"
-                  << "SK        = " << initialKineticEnergySum << "\n"
-                  << "SK exact  = " << tgvExpectedKineticEnergySum << "\n"
-                  << "KStar     = " << initialKineticEnergyStar << "\n"
-                  << "rel error = " << initialKineticEnergyRelativeError << "\n";
+        recordJetKineticEnergy(
+            energyHistory,
+            static_cast<label_t>(0),
+            initialEnergy
+        );
 
         // ========================================================
-        // Initial enstrophy
+        // Initialize radial output files
         // ========================================================
 
-        const statistics_t initialEnstrophySum = launchEnstrophyStatistics(*A, statisticsMemory);
-        const statistics_t initialEnstrophyStar = taylorGreenEnstrophyStar(initialEnstrophySum);
-        const statistics_t expectedInitialEnstrophySum = taylorGreenExpectedInitialEnstrophySumFD();
-        const statistics_t expectedInitialEnstrophyStar = taylorGreenExpectedInitialEnstrophyStarFD();
-        const statistics_t initialEnstrophyRelativeError = taylorGreenInitialEnstrophyRelativeError(initialEnstrophyStar);
-
-        writeTaylorGreenEnstrophy(statisticsOutput, static_cast<label_t>(0), initialEnstrophySum);
-
-        std::cout << std::setprecision(std::numeric_limits<statistics_t>::max_digits10)
-                  << "Taylor-Green step-0 enstrophy validation\n"
-                  << "Szeta         = " << initialEnstrophySum << "\n"
-                  << "Szeta exact   = " << expectedInitialEnstrophySum << "\n"
-                  << "ZetaStar      = " << initialEnstrophyStar << "\n"
-                  << "ZetaStar FD   = " << expectedInitialEnstrophyStar << "\n"
-                  << "ZetaStar cont = " << static_cast<statistics_t>(3.0 / 8.0) << "\n"
-                  << "rel error     = " << initialEnstrophyRelativeError << "\n";
+        writeJetRadialStatistics(jetStatistics);
 
         // ========================================================
         // Initial VTI output
         // ========================================================
 
         copyDeviceToHost(memory.host, *A);
-        writeTaylorGreenVTI(memory.host, static_cast<label_t>(0));
+        writeJetVTI(memory.host, static_cast<label_t>(0));
+
+        std::cout << "Jet Reynolds number: " << jet_Re << '\n';
+        std::cout << "Jet diameter: " << jet_diameter << '\n';
+        std::cout << "Jet velocity: " << jet_velocity << '\n';
+        std::cout << "Statistics start t*: " << jetStatsStartTStar << '\n';
+        std::cout << "Statistics sampling interval: "
+                  << jetStatsSampleEvery << '\n';
+        std::cout << "Energy sampling interval: "
+                  << energySampleEvery << '\n';
 
         // ========================================================
         // Time evolution
@@ -144,55 +146,144 @@ int main()
             launchLBM(cfg, *A, *B);
 
             // ====================================================
+            // Jet boundary conditions
+            // ====================================================
+
+            launchJetBoundaryConditions(cfg, *A, *B);
+
+            // ====================================================
             // A-B swap
             // ====================================================
 
             std::swap(A, B);
 
-            const label_t completedStep = step + static_cast<label_t>(1);
+            const label_t completedStep =
+                step + static_cast<label_t>(1);
+
+            // ====================================================
+            // Dimensionless time
+            // ====================================================
+
+            const real_t tStar =
+                static_cast<real_t>(completedStep) *
+                jet_velocity / jet_diameter;
+
+            // ====================================================
+            // Kinetic-energy monitoring
+            // ====================================================
+
+            if (completedStep % energySampleEvery ==
+                static_cast<label_t>(0))
+            {
+                const statistics_t totalEnergy =
+                    launchKineticEnergyStatistics(
+                        *A, energyReduction
+                    );
+
+                recordJetKineticEnergy(
+                    energyHistory,
+                    completedStep,
+                    totalEnergy
+                );
+            }
+
+            // ====================================================
+            // Radial statistics
+            //
+            // Begin at the prescribed dimensionless time.
+            // Sample at a fixed frequency.
+            // ====================================================
+
+            if (tStar >= jetStatsStartTStar &&
+                completedStep % jetStatsSampleEvery ==
+                    static_cast<label_t>(0))
+            {
+                if (jetStatistics.sampledSteps == 0)
+                {
+                    std::cout
+                        << "Starting jet radial statistics at step "
+                        << completedStep
+                        << " | t* = " << tStar << '\n';
+                }
+
+                launchJetRadialStatistics(
+                    cfg,
+                    *A,
+                    jetStatistics,
+                    completedStep
+                );
+            }
 
             // ====================================================
             // MLUPS output
             // ====================================================
 
-            if (completedStep % mlupsEvery == static_cast<label_t>(0))
+            if (completedStep % mlupsEvery ==
+                static_cast<label_t>(0))
             {
                 printMlups(mlupsCounter, completedStep);
             }
 
             // ====================================================
-            // Taylor-Green statistics
+            // Statistical output and visualization
             // ====================================================
 
-            if (statisticsSampleDue<statisticsStart, statisticsEvery>(completedStep))
+            if (completedStep % output ==
+                static_cast<label_t>(0))
             {
-                const statistics_t kineticEnergySum = launchKineticEnergyStatistics(*A, statisticsMemory);
-                const statistics_t enstrophySum = launchEnstrophyStatistics(*A, statisticsMemory);
+                // Save radial moments after sampling begins
+                if (jetStatistics.sampledSteps > 0)
+                {
+                    writeJetRadialStatistics(jetStatistics);
+                }
 
-                writeTaylorGreenKineticEnergy(statisticsOutput, completedStep, kineticEnergySum);
-                writeTaylorGreenEnstrophy(statisticsOutput, completedStep, enstrophySum);
-            }
-
-            // ====================================================
-            // VTI output
-            // ====================================================
-
-            if (completedStep % output == static_cast<label_t>(0))
-            {
+                // Write jet velocity field
                 copyDeviceToHost(memory.host, *A);
-                writeTaylorGreenVTI(memory.host, completedStep);
+                writeJetVTI(memory.host, completedStep);
             }
         }
 
         // ========================================================
-        // Close statistics output
+        // Final kinetic-energy measurement
         // ========================================================
 
-        closeTaylorGreenStatisticsOutput(statisticsOutput);
+        if (Steps % energySampleEvery != static_cast<label_t>(0))
+        {
+            const statistics_t finalEnergy =
+                launchKineticEnergyStatistics(*A, energyReduction);
+
+            recordJetKineticEnergy(
+                energyHistory,
+                Steps,
+                finalEnergy
+            );
+        }
+
+        // ========================================================
+        // Final radial statistics output
+        // ========================================================
+
+        writeJetRadialStatistics(jetStatistics);
+
+        // ========================================================
+        // Close kinetic-energy output
+        // ========================================================
+
+        closeJetKineticEnergyHistory(energyHistory);
+
+        // ========================================================
+        // Final information
+        // ========================================================
+
+        std::cout << "Jet simulation completed.\n";
+        std::cout << "Radial samples: "
+                  << jetStatistics.sampledSteps << '\n';
+        std::cout << "Radial statistics directory: "
+                  << jetStatistics.directory << '\n';
     }
     catch (const std::exception &error)
     {
-        std::cerr << error.what() << "\n";
+        std::cerr << error.what() << '\n';
         exitCode = EXIT_FAILURE;
     }
 
@@ -204,7 +295,8 @@ int main()
 
     destroyMlupsCounter(mlupsCounter);
 
-    freeStatisticsMemory(statisticsMemory);
+    freeStatisticsMemory(energyReduction);
+    freeJetRadialStatistics(jetStatistics);
     freeMemory(memory);
 
     CUDA_CHECK(cudaDeviceReset());

@@ -16,9 +16,9 @@ inline constexpr label_t blockZ = static_cast<label_t>(4);
 // Grid
 // ============================================================
 
-inline constexpr label_t NX = static_cast<label_t>(514);
-inline constexpr label_t NY = static_cast<label_t>(514);
-inline constexpr label_t NZ = static_cast<label_t>(514);
+inline constexpr label_t NX = static_cast<label_t>(130);
+inline constexpr label_t NY = static_cast<label_t>(402);
+inline constexpr label_t NZ = static_cast<label_t>(130);
 
 static_assert(NX > static_cast<label_t>(2) && NY > static_cast<label_t>(2) && NZ > static_cast<label_t>(2));
 
@@ -35,7 +35,7 @@ inline constexpr label_t Ncells = NX * NY * NZ;
 // Simulation control
 // ============================================================
 
-inline constexpr label_t Steps = static_cast<label_t>(32595);
+inline constexpr label_t Steps = static_cast<label_t>(100000000000);
 inline constexpr label_t output = static_cast<label_t>(1000);
 
 inline constexpr label_t statisticsStart = static_cast<label_t>(0);
@@ -121,7 +121,7 @@ inline constexpr real_t tgv_nu = tgv_U0 * tgv_L / tgv_Re;
 // Jet parameters
 // ============================================================
 
-inline constexpr real_t jet_radius = static_cast<real_t>(15.0);
+inline constexpr real_t jet_radius = static_cast<real_t>(12.0);
 inline constexpr real_t jet_diameter = static_cast<real_t>(2) * jet_radius;
 
 inline constexpr real_t jet_x0 = static_cast<real_t>(NX - 1) / static_cast<real_t>(2);
@@ -131,6 +131,10 @@ inline constexpr real_t jet_velocity = static_cast<real_t>(0.05);
 inline constexpr real_t jet_Re = static_cast<real_t>(5000);
 
 inline constexpr real_t jet_nu = jet_diameter * jet_velocity / jet_Re;
+
+
+inline constexpr real_t jetStatsStartTStar = static_cast<real_t>(100.0);
+inline constexpr label_t jetStatsSampleEvery = static_cast<label_t>(20);
 
 // ============================================================
 // Channel-flow parameters
@@ -166,10 +170,10 @@ inline constexpr real_t channel_kz = static_cast<real_t>(2) * pi / static_cast<r
 // Change this manually depending on the case:
 //
 // Jet:
-// inline constexpr real_t nu = jet_nu;
+inline constexpr real_t nu = jet_nu;
 //
 // Taylor-Green:
-inline constexpr real_t nu = tgv_nu;
+// inline constexpr real_t nu = tgv_nu;
 //
 // Channel:
 // inline constexpr real_t nu = channel_nu;

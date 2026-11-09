@@ -7,11 +7,16 @@
 *.vtu
 *.pvti
 *.pvd
+*.tiff
+*.avi
 /post/**/*.png
 
 /output/
 /post/taylorgreen/validation/data/
 /post/taylorgreen/validation/plots/
+/post/jet/validation/data/
+/post/jet/validation/plots/
+
 
 # ============================================================
 # Compiled executable

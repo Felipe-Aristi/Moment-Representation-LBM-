@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -75,7 +76,15 @@ inline void writeJetVTI(const HostState &state, const label_t step)
     // ========================================================
 
     std::ostringstream folder;
-    folder << "post/jet/JET_RE_" << static_cast<label_t>(jet_Re);
+    folder << "post/jet/JET_RE_" << static_cast<label_t>(jet_Re)
+           << "_" << jetVtiNX << "x" << jetVtiNY << "x" << jetVtiNZ;
+
+    if (step == static_cast<label_t>(0))
+    {
+        std::cout << "Jet: Re=" << jet_Re
+                  << ", physical mesh=" << jetVtiNX << "x" << jetVtiNY << "x" << jetVtiNZ
+                  << ", output=" << folder.str() << '\n';
+    }
 
     std::filesystem::create_directories(folder.str());
 

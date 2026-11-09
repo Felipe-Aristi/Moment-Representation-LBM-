@@ -94,7 +94,7 @@ inline constexpr std::size_t tgvStatisticsRecordBytes = sizeof(label_t) + sizeof
 
 static_assert(std::is_same_v<label_t, std::uint32_t>);
 static_assert(sizeof(label_t) == static_cast<std::size_t>(4));
-static_assert(std::is_same_v<statistics_t, float> || std::is_same_v<statistics_t, double>);
+static_assert(std::is_same_v<statistics_t, float> || std::is_same_v<statistics_t, float>);
 static_assert(std::numeric_limits<statistics_t>::is_iec559);
 static_assert(std::endian::native == std::endian::little);
 static_assert(tgvStatisticsStepOffsetBytes == static_cast<std::size_t>(0));
