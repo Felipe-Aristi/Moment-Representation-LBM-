@@ -1,4 +1,3 @@
-
 #include <cuda_runtime.h>
 
 #include <cstdlib>
@@ -18,475 +17,306 @@
 #include "utilities/types.cuh"
 #include "utilities/mlups_count.cuh"
 
+#include "../cases/taylorgreen/statistics.cuh"
+#include "../cases/jet/statistics.cuh"
+#include "../cases/jet/energy_statistics.cuh"
 #include "../cases/channelflow/statistics.cuh"
 #include "../cases/channelflow/energy_statistics.cuh"
 
+#include "../post/taylorgreen/vti.cuh"
+#include "../post/jet/vti.cuh"
 #include "../post/channelflow/vti.cuh"
 
 // ============================================================
-// Channel-flow consistency checks
+// Case-specific VTI output
 // ============================================================
 
-static_assert(nu == channel_nu,
-              "Channel flow requires nu = channel_nu in constants.cuh");
+template <SimulationCase Case>
+inline void writeSelectedVTI(Memory &memory, const MomentState &state,
+                             const label_t step)
+{
+    copyDeviceToHost(memory.host, state);
 
-static_assert(statisticsEvery > static_cast<label_t>(0));
-static_assert(output > static_cast<label_t>(0));
+    if constexpr (Case == SimulationCase::TaylorGreen)
+    {
+        writeTaylorGreenVTI(memory.host, step);
+    }
+    else if constexpr (Case == SimulationCase::Jet)
+    {
+        writeJetVTI(memory.host, step);
+    }
+    else
+    {
+        writeChannelFlowVTI(memory.host, step);
+    }
+}
 
 // ============================================================
-// Main
+// Run one compile-time-selected simulation
 // ============================================================
 
-int main()
+template <SimulationCase Case>
+int runSimulation()
 {
     constexpr int deviceID = 0;
 
-    // ========================================================
-    // Kinetic-energy monitoring
-    // ========================================================
+    constexpr label_t jetEnergySampleEvery = static_cast<label_t>(2000);
+    constexpr label_t channelEnergySampleEvery = static_cast<label_t>(200);
+    constexpr label_t channelStatsWriteEvery = static_cast<label_t>(10000);
 
-    constexpr label_t energySampleEvery =
-        static_cast<label_t>(200);
-
-    // ========================================================
-    // Channel statistical output frequency
-    //
-    // Independent of statistics sampling and VTI output.
-    // ========================================================
-
-    constexpr label_t channelStatsWriteEvery =
-        static_cast<label_t>(10000);
+    static_assert(output > static_cast<label_t>(0));
+    static_assert(statisticsEvery > static_cast<label_t>(0));
+    static_assert(jetStatsSampleEvery > static_cast<label_t>(0));
+    static_assert(channelStatsSampleEvery > static_cast<label_t>(0));
 
     CUDA_CHECK(cudaSetDevice(deviceID));
-
-    const CudaConfig cfg =
-        print_device_and_make_config(deviceID);
-
-    // ========================================================
-    // Solver memory
-    // ========================================================
+    const CudaConfig cfg = print_device_and_make_config(deviceID);
 
     Memory memory{};
-
-    // ========================================================
-    // Wall-normal statistics memory
-    // ========================================================
-
-    ChannelFlowStatistics channelStatistics{};
-
-    // ========================================================
-    // Kinetic-energy reduction memory
-    // ========================================================
-
-    StatisticsMemory energyReduction{};
-
-    // ========================================================
-    // Kinetic-energy history
-    // ========================================================
-
-    ChannelKineticEnergyHistory energyHistory{};
-
-    // ========================================================
-    // MLUPS counter
-    // ========================================================
-
+    StatisticsMemory reduction{};
     MlupsCounter mlupsCounter{};
-
     bool mlupsInitialized = false;
+
+    TaylorGreenStatisticsOutput tgvOutput{};
+    JetRadialStatistics jetStatistics{};
+    JetKineticEnergyHistory jetEnergy{};
+    ChannelFlowStatistics channelStatistics{};
+    ChannelKineticEnergyHistory channelEnergy{};
 
     int exitCode = EXIT_SUCCESS;
 
     try
     {
-        // ====================================================
-        // Allocate solver memory
-        // ====================================================
-
         allocateMemory(memory);
+        allocateStatisticsMemory(reduction);
 
         // ====================================================
-        // Allocate wall-normal statistics
+        // Initialize only the selected case
         // ====================================================
 
-        initializeChannelFlowStatistics(
-            channelStatistics
-        );
-
-        // ====================================================
-        // Allocate kinetic-energy reduction memory
-        // ====================================================
-
-        allocateStatisticsMemory(
-            energyReduction
-        );
-
-        // ====================================================
-        // Initialize kinetic-energy history
-        //
-        // Saved alongside the channel moments.
-        // ====================================================
-
-        initializeChannelKineticEnergyHistory(
-            energyHistory,
-            channelStatistics.directory
-        );
-
-        // ====================================================
-        // Initialize MLUPS counter
-        // ====================================================
+        if constexpr (Case == SimulationCase::TaylorGreen)
+        {
+            initializeTaylorGreenStatisticsOutput(tgvOutput);
+            launchTaylorGreenInitialization(cfg, memory.d_A);
+        }
+        else if constexpr (Case == SimulationCase::Jet)
+        {
+            initializeJetRadialStatistics(jetStatistics);
+            initializeJetKineticEnergyHistory(jetEnergy);
+            launchJetInitialization(cfg, memory.d_A);
+        }
+        else
+        {
+            initializeChannelFlowStatistics(channelStatistics);
+            initializeChannelKineticEnergyHistory(
+                channelEnergy, channelStatistics.directory);
+            launchChannelFlowInitialization(cfg, memory.d_A);
+        }
 
         initializeMlupsCounter(mlupsCounter);
         mlupsInitialized = true;
-
-        // ====================================================
-        // Channel-flow initialization
-        // ====================================================
-
-        launchChannelFlowInitialization(
-            cfg,
-            memory.d_A
-        );
-
-        // ====================================================
-        // A-B flip-flop pointers
-        // ====================================================
 
         MomentState *A = &memory.d_A;
         MomentState *B = &memory.d_B;
 
         // ====================================================
-        // Initial kinetic energy
-        //
-        // Record at step zero.
+        // Step-zero scalar statistics
         // ====================================================
 
-        const statistics_t initialEnergy =
-            launchKineticEnergyStatistics(
-                *A,
-                energyReduction
-            );
+        if constexpr (Case == SimulationCase::TaylorGreen)
+        {
+            const statistics_t energy =
+                launchKineticEnergyStatistics(*A, reduction);
+            const statistics_t enstrophy =
+                launchEnstrophyStatistics(*A, reduction);
 
-        recordChannelKineticEnergy(
-            energyHistory,
-            static_cast<label_t>(0),
-            initialEnergy
-        );
+            writeTaylorGreenKineticEnergy(tgvOutput, 0, energy);
+            writeTaylorGreenEnstrophy(tgvOutput, 0, enstrophy);
+        }
+        else if constexpr (Case == SimulationCase::Jet)
+        {
+            recordJetKineticEnergy(
+                jetEnergy, 0, launchKineticEnergyStatistics(*A, reduction));
+        }
+        else
+        {
+            recordChannelKineticEnergy(
+                channelEnergy, 0, launchKineticEnergyStatistics(*A, reduction));
+        }
 
-        // ====================================================
-        // Initial VTI output
-        // ====================================================
+        writeSelectedVTI<Case>(memory, *A, 0);
 
-        copyDeviceToHost(
-            memory.host,
-            *A
-        );
+        std::cout << "\n========================================\n";
+        if constexpr (Case == SimulationCase::TaylorGreen)
+            std::cout << "Taylor-Green vortex | Re = " << tgv_Re << '\n';
+        else if constexpr (Case == SimulationCase::Jet)
+            std::cout << "Turbulent jet | Re = " << jet_Re << '\n';
+        else
+            std::cout << "Turbulent channel | Re_tau = " << channel_ReTau << '\n';
 
-        writeChannelFlowVTI(
-            memory.host,
-            static_cast<label_t>(0)
-        );
-
-        // ====================================================
-        // Simulation parameters
-        // ====================================================
-
-        std::cout << '\n';
-        std::cout << "========================================\n";
-        std::cout << "        TURBULENT CHANNEL FLOW\n";
-        std::cout << "========================================\n";
-
-        std::cout << "Re_tau: "
-                  << channel_ReTau << '\n';
-
-        std::cout << "Half-height H: "
-                  << channel_halfHeight << '\n';
-
-        std::cout << "Channel height: "
-                  << channel_height << '\n';
-
-        std::cout << "Friction velocity: "
-                  << channel_uTau << '\n';
-
-        std::cout << "Kinematic viscosity: "
-                  << channel_nu << '\n';
-
-        std::cout << "Acceleration: "
-                  << channel_g << '\n';
-
-        std::cout << "Relaxation time: "
-                  << tau << '\n';
-
-        std::cout << "Grid: "
-                  << NXPhysical << " x "
-                  << NY << " x "
-                  << NZPhysical << '\n';
-
-        std::cout << "Total steps: "
-                  << Steps << '\n';
-
-        std::cout << "Statistics start step: "
-                  << statisticsStart << '\n';
-
-        std::cout << "Statistics sample every: "
-                  << statisticsEvery << '\n';
-
-        std::cout << "Statistics write every: "
-                  << channelStatsWriteEvery << '\n';
-
-        std::cout << "Energy sample every: "
-                  << energySampleEvery << '\n';
-
-        std::cout << "VTI output every: "
-                  << output << '\n';
-
+        std::cout << "Physical grid: " << NXPhysical << " x "
+                  << NYPhysical << " x " << NZPhysical << '\n';
+        std::cout << "nu = " << nu << ", tau = " << tau << '\n';
+        std::cout << "Steps = " << Steps << ", VTI interval = " << output << '\n';
         std::cout << "========================================\n\n";
-
         printMlupsHeader();
 
         // ====================================================
         // Time evolution
         // ====================================================
 
-        for (label_t step = static_cast<label_t>(0);
-             step < Steps;
-             ++step)
+        for (label_t step = 0; step < Steps; ++step)
         {
-            // =================================================
-            // MLUPS timer
-            // =================================================
-
-            if (step % mlupsEvery ==
-                static_cast<label_t>(0))
-            {
+            if (step % mlupsEvery == 0)
                 startMlupsCounter(mlupsCounter);
+
+            // ------------------------------------------------
+            // Streaming and collision; force only for channel
+            // ------------------------------------------------
+
+            if constexpr (Case == SimulationCase::Channel)
+            {
+                launchLBMF(cfg, *A, *B);
+                launchChannelBoundaryConditions(cfg, *A, *B);
             }
-
-            // =================================================
-            // Forced MR-LBM evolution
-            //
-            // F_x = rho * channel_g
-            // F_y = 0
-            // F_z = 0
-            // =================================================
-
-            launchLBMF(cfg, *A, *B);
-
-            // =================================================
-            // Channel boundary conditions
-            //
-            // No-slip walls at y = 0 and y = NY - 1
-            // Periodicity along x and z
-            // =================================================
-
-            launchChannelBoundaryConditions(
-                cfg,
-                *A,
-                *B
-            );
-
-            // =================================================
-            // A-B swap
-            // =================================================
+            else if constexpr (Case == SimulationCase::Jet)
+            {
+                launchLBM(cfg, *A, *B);
+                launchJetBoundaryConditions(cfg, *A, *B);
+            }
+            else
+            {
+                launchLBM(cfg, *A, *B);
+            }
 
             std::swap(A, B);
+            const label_t completedStep = step + 1;
 
-            const label_t completedStep =
-                step + static_cast<label_t>(1);
+            // ------------------------------------------------
+            // Taylor-Green: energy and enstrophy
+            // ------------------------------------------------
 
-            // =================================================
-            // Wall-normal velocity statistics
-            //
-            // Fixed starting step and sampling frequency.
-            // No automatic stationarity criterion.
-            // =================================================
-
-            if (statisticsSampleDue<
-                    statisticsStart,
-                    statisticsEvery
-                >(completedStep))
+            if constexpr (Case == SimulationCase::TaylorGreen)
             {
-                if (channelStatistics.sampleCount == 0)
+                if (statisticsSampleDue<statisticsStart, statisticsEvery>(completedStep))
                 {
-                    const statistics_t tPlus =
-                        static_cast<statistics_t>(completedStep) *
-                        channel_uTau * channel_uTau /
-                        channel_nu;
+                    const statistics_t energy =
+                        launchKineticEnergyStatistics(*A, reduction);
+                    const statistics_t enstrophy =
+                        launchEnstrophyStatistics(*A, reduction);
 
-                    std::cout
-                        << "\nStarting channel statistics at step "
-                        << completedStep
-                        << " | t+ = " << tPlus
-                        << "\n\n";
+                    writeTaylorGreenKineticEnergy(tgvOutput, completedStep, energy);
+                    writeTaylorGreenEnstrophy(tgvOutput, completedStep, enstrophy);
                 }
-
-                launchChannelFlowStatistics(
-                    *A,
-                    channelStatistics,
-                    completedStep
-                );
             }
 
-            // =================================================
-            // Kinetic-energy monitoring
-            //
-            // Independent of wall-normal statistics.
-            // The reduction returns 0.5 * sum(|u|^2).
-            // =================================================
+            // ------------------------------------------------
+            // Jet: kinetic-energy history and radial profiles
+            // ------------------------------------------------
 
-            if (completedStep % energySampleEvery ==
-                static_cast<label_t>(0))
+            if constexpr (Case == SimulationCase::Jet)
             {
-                const statistics_t totalEnergy =
-                    launchKineticEnergyStatistics(
-                        *A,
-                        energyReduction
-                    );
+                if (completedStep % jetEnergySampleEvery == 0)
+                {
+                    recordJetKineticEnergy(
+                        jetEnergy, completedStep,
+                        launchKineticEnergyStatistics(*A, reduction));
+                }
 
+                if (jetRadialSampleDue(completedStep))
+                {
+                    if (jetStatistics.sampledSteps == 0)
+                        std::cout << "Starting jet radial statistics at step "
+                                  << completedStep << '\n';
+
+                    launchJetRadialStatistics(cfg, *A, jetStatistics, completedStep);
+                }
+
+                if (completedStep % output == 0 && jetStatistics.sampledSteps > 0)
+                    writeJetRadialStatistics(jetStatistics);
+            }
+
+            // ------------------------------------------------
+            // Channel: kinetic-energy history and plane moments
+            // ------------------------------------------------
+
+            if constexpr (Case == SimulationCase::Channel)
+            {
+                if (completedStep % channelEnergySampleEvery == 0)
+                {
+                    recordChannelKineticEnergy(
+                        channelEnergy, completedStep,
+                        launchKineticEnergyStatistics(*A, reduction));
+                }
+
+                if (statisticsSampleDue<channelStatsStartStep,
+                                        channelStatsSampleEvery>(completedStep))
+                {
+                    if (channelStatistics.sampleCount == 0)
+                        std::cout << "Starting channel profiles at step "
+                                  << completedStep << '\n';
+
+                    launchChannelFlowStatistics(
+                        *A, channelStatistics, completedStep);
+                }
+
+                if (completedStep % channelStatsWriteEvery == 0 &&
+                    channelStatistics.sampleCount > 0)
+                    writeChannelFlowStatistics(channelStatistics);
+            }
+
+            // ------------------------------------------------
+            // Performance and visualization output
+            // ------------------------------------------------
+
+            if (completedStep % mlupsEvery == 0)
+                printMlups(mlupsCounter, completedStep);
+
+            if (completedStep % output == 0)
+                writeSelectedVTI<Case>(memory, *A, completedStep);
+        }
+
+        // ====================================================
+        // Final records (avoid duplicate step numbers)
+        // ====================================================
+
+        if constexpr (Case == SimulationCase::Jet)
+        {
+            if (Steps % jetEnergySampleEvery != 0)
+                recordJetKineticEnergy(
+                    jetEnergy, Steps,
+                    launchKineticEnergyStatistics(*A, reduction));
+
+            if (jetStatistics.sampledSteps > 0)
+                writeJetRadialStatistics(jetStatistics);
+
+            closeJetKineticEnergyHistory(jetEnergy);
+        }
+        else if constexpr (Case == SimulationCase::Channel)
+        {
+            if (Steps % channelEnergySampleEvery != 0)
                 recordChannelKineticEnergy(
-                    energyHistory,
-                    completedStep,
-                    totalEnergy
-                );
-            }
+                    channelEnergy, Steps,
+                    launchKineticEnergyStatistics(*A, reduction));
 
-            // =================================================
-            // MLUPS output
-            // =================================================
+            if (channelStatistics.sampleCount > 0)
+                writeChannelFlowStatistics(channelStatistics);
 
-            if (completedStep % mlupsEvery ==
-                static_cast<label_t>(0))
-            {
-                printMlups(
-                    mlupsCounter,
-                    completedStep
-                );
-            }
-
-            // =================================================
-            // Periodic channel statistics output
-            //
-            // Only the ten wall-normal profiles are copied.
-            // =================================================
-
-            if (completedStep % channelStatsWriteEvery ==
-                static_cast<label_t>(0))
-            {
-                if (channelStatistics.sampleCount > 0)
-                {
-                    writeChannelFlowStatistics(
-                        channelStatistics
-                    );
-                }
-            }
-
-            // =================================================
-            // VTI output
-            // =================================================
-
-            if (completedStep % output ==
-                static_cast<label_t>(0))
-            {
-                copyDeviceToHost(
-                    memory.host,
-                    *A
-                );
-
-                writeChannelFlowVTI(
-                    memory.host,
-                    completedStep
-                );
-            }
+            closeChannelKineticEnergyHistory(channelEnergy);
         }
-
-        // ====================================================
-        // Final kinetic-energy measurement
-        //
-        // Avoid a duplicate sample at the final step.
-        // ====================================================
-
-        if (Steps % energySampleEvery !=
-            static_cast<label_t>(0))
+        else
         {
-            const statistics_t finalEnergy =
-                launchKineticEnergyStatistics(
-                    *A,
-                    energyReduction
-                );
-
-            recordChannelKineticEnergy(
-                energyHistory,
-                Steps,
-                finalEnergy
-            );
+            closeTaylorGreenStatisticsOutput(tgvOutput);
         }
 
-        // ====================================================
-        // Final wall-normal statistics output
-        // ====================================================
+        if (Steps % output != 0)
+            writeSelectedVTI<Case>(memory, *A, Steps);
 
-        if (channelStatistics.sampleCount > 0)
-        {
-            writeChannelFlowStatistics(
-                channelStatistics
-            );
-        }
-
-        // ====================================================
-        // Final VTI output
-        // ====================================================
-
-        if (Steps % output !=
-            static_cast<label_t>(0))
-        {
-            copyDeviceToHost(
-                memory.host,
-                *A
-            );
-
-            writeChannelFlowVTI(
-                memory.host,
-                Steps
-            );
-        }
-
-        // ====================================================
-        // Close kinetic-energy history
-        // ====================================================
-
-        closeChannelKineticEnergyHistory(
-            energyHistory
-        );
-
-        // ====================================================
-        // Final information
-        // ====================================================
-
-        std::cout << "\n========================================\n";
-        std::cout << "Channel-flow simulation completed.\n";
-
-        std::cout << "Statistical samples: "
-                  << channelStatistics.sampleCount << '\n';
-
-        std::cout << "Energy samples: "
-                  << energyHistory.sampleCount << '\n';
-
-        std::cout << "First statistics step: "
-                  << channelStatistics.firstStep << '\n';
-
-        std::cout << "Last statistics step: "
-                  << channelStatistics.lastStep << '\n';
-
-        std::cout << "Statistics directory: "
-                  << channelStatistics.directory << '\n';
-
-        std::cout << "========================================\n";
+        std::cout << "\nSimulation completed.\n";
     }
     catch (const std::exception &error)
     {
-        std::cerr
-            << "Channel-flow error: "
-            << error.what() << '\n';
-
+        std::cerr << "Simulation error: " << error.what() << '\n';
         exitCode = EXIT_FAILURE;
     }
 
@@ -496,23 +326,22 @@ int main()
 
     CUDA_CHECK(cudaDeviceSynchronize());
 
-    if (energyHistory.csv.is_open())
-    {
-        energyHistory.csv.close();
-    }
-
     if (mlupsInitialized)
-    {
         destroyMlupsCounter(mlupsCounter);
-    }
 
-    freeStatisticsMemory(energyReduction);
+    if constexpr (Case == SimulationCase::Jet)
+        freeJetRadialStatistics(jetStatistics);
+    else if constexpr (Case == SimulationCase::Channel)
+        freeChannelFlowStatistics(channelStatistics);
 
-    freeChannelFlowStatistics(channelStatistics);
-
+    freeStatisticsMemory(reduction);
     freeMemory(memory);
 
     CUDA_CHECK(cudaDeviceReset());
-
     return exitCode;
+}
+
+int main()
+{
+    return runSimulation<simulationCase>();
 }
