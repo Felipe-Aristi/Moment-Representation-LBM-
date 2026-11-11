@@ -1,0 +1,16 @@
+NXPhysical 254
+NY 128
+NZPhysical 126
+ReTau 180
+halfHeight 63.5
+uTau 0.00999999978
+nu 0.00352777774
+g 1.57480315e-06
+sample_count 3475
+first_step 400
+last_step 1390000
+moment_fields 10
+moment_names ux uy uz ux2 uy2 uz2 uxuy ux3 uy3 uz3
+moment_dtype float32
+moment_layout field_major_field_times_NY_plus_y
+wall_normal y

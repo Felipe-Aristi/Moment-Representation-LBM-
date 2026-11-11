@@ -10,7 +10,7 @@ VALIDATION_DIRECTORY = Path(__file__).resolve().parent
 
 sys.path.insert(0, str(VALIDATION_DIRECTORY))
 
-from statistics_io import load_kinetic_energy, load_enstrophy
+from post.channelflow.validation.statistics_io import load_kinetic_energy, load_enstrophy
 
 
 def derivative_fourth_order(values: np.ndarray, x: np.ndarray) -> np.ndarray:

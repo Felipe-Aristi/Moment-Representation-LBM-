@@ -20,7 +20,7 @@ sys.path.insert(0, str(VALIDATION_DIRECTORY))
 
 from prettyPlot import pretty_plot
 from benchmark import REFERENCE_LABEL, load_benchmark
-from statistics_io import (
+from post.channelflow.validation.statistics_io import (
     load_kinetic_energy,
     load_enstrophy,
 )

@@ -16,9 +16,9 @@ inline constexpr label_t blockZ = static_cast<label_t>(4);
 // Grid
 // ============================================================
 
-inline constexpr label_t NX = static_cast<label_t>(130);
-inline constexpr label_t NY = static_cast<label_t>(402);
-inline constexpr label_t NZ = static_cast<label_t>(130);
+inline constexpr label_t NX = static_cast<label_t>(256);
+inline constexpr label_t NY = static_cast<label_t>(128);
+inline constexpr label_t NZ = static_cast<label_t>(128);
 
 static_assert(NX > static_cast<label_t>(2) && NY > static_cast<label_t>(2) && NZ > static_cast<label_t>(2));
 
@@ -163,6 +163,9 @@ inline constexpr real_t channel_perturbation = static_cast<real_t>(0.5) * channe
 inline constexpr real_t channel_kx = static_cast<real_t>(2) * pi / static_cast<real_t>(NX - 2);
 inline constexpr real_t channel_kz = static_cast<real_t>(2) * pi / static_cast<real_t>(NZ - 2);
 
+inline constexpr label_t channelStatsStartStep = static_cast<label_t>(100000);
+inline constexpr label_t channelStatsSampleEvery = static_cast<label_t>(400);
+
 // ============================================================
 // Active fluid parameters
 // ============================================================
@@ -170,13 +173,13 @@ inline constexpr real_t channel_kz = static_cast<real_t>(2) * pi / static_cast<r
 // Change this manually depending on the case:
 //
 // Jet:
-inline constexpr real_t nu = jet_nu;
+// inline constexpr real_t nu = jet_nu;
 //
 // Taylor-Green:
 // inline constexpr real_t nu = tgv_nu;
 //
 // Channel:
-// inline constexpr real_t nu = channel_nu;
+inline constexpr real_t nu = channel_nu;
 
 // inline constexpr real_t nu = tgv_nu;
 

@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from benchmark import REFERENCE_LABEL, load_benchmark
-from statistics_io import load_kinetic_energy, load_enstrophy, read_statistics_metadata
+from post.channelflow.validation.statistics_io import load_kinetic_energy, load_enstrophy, read_statistics_metadata
 
 DIRECTORY = Path(__file__).resolve().parent
 sys.path.insert(0, str(DIRECTORY.parents[1]))
