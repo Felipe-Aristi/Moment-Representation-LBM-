@@ -16,7 +16,7 @@ enum class SimulationCase : std::uint8_t
     Channel
 };
 
-inline constexpr SimulationCase simulationCase = SimulationCase::Channel;
+inline constexpr SimulationCase simulationCase = SimulationCase:: Jet;
 
 // ============================================================
 // CUDA block dimensions
@@ -83,11 +83,11 @@ static_assert(simulationCase != SimulationCase::TaylorGreen ||
 // ============================================================
 
 inline constexpr label_t tgvSteps = static_cast<label_t>(9000);
-inline constexpr label_t jetSteps = static_cast<label_t>(120000);
+inline constexpr label_t jetSteps = static_cast<label_t>(12000000);
 inline constexpr label_t channelSteps = static_cast<label_t>(200000);
 
 inline constexpr label_t tgvOutputEvery = static_cast<label_t>(1000);
-inline constexpr label_t jetOutputEvery = static_cast<label_t>(10000);
+inline constexpr label_t jetOutputEvery = static_cast<label_t>(1000);
 inline constexpr label_t channelOutputEvery = static_cast<label_t>(10000);
 
 inline constexpr label_t Steps =
@@ -165,7 +165,7 @@ inline constexpr real_t tgv_nu = tgv_U0 * tgv_L / tgv_Re;
 // Jet parameters
 // ============================================================
 
-inline constexpr real_t jet_radius = static_cast<real_t>(12.0);
+inline constexpr real_t jet_radius = static_cast<real_t>(10.0);
 inline constexpr real_t jet_diameter = static_cast<real_t>(2) * jet_radius;
 
 inline constexpr real_t jet_x0 = static_cast<real_t>(NX - 1) / static_cast<real_t>(2);
@@ -175,8 +175,26 @@ inline constexpr real_t jet_velocity = static_cast<real_t>(0.05);
 inline constexpr real_t jet_Re = static_cast<real_t>(5000);
 inline constexpr real_t jet_nu = jet_diameter * jet_velocity / jet_Re;
 
-inline constexpr real_t jetStatsStartTStar = static_cast<real_t>(100.0);
-inline constexpr label_t jetStatsSampleEvery = static_cast<label_t>(20);
+// ============================================================
+// Jet outlet sponge layer
+// ============================================================
+
+inline constexpr label_t jetSpongeCells = (jetGridNY - static_cast<label_t>(2)) / static_cast<label_t>(12);
+
+inline constexpr real_t jetSpongeGain = static_cast<real_t>(200.0);
+
+inline constexpr label_t jetSpongeYEnd = jetGridNY - static_cast<label_t>(2);
+
+inline constexpr label_t jetSpongeYStart = jetSpongeYEnd - jetSpongeCells + static_cast<label_t>(1);
+
+inline constexpr real_t jetNoiseAmplitude = static_cast<real_t>(0.05);
+inline constexpr label_t jetNoiseCorrelationSteps = static_cast<label_t>(1200);
+
+
+inline constexpr label_t jetStatsStartStep = static_cast<label_t>(100000);
+inline constexpr label_t jetStatsSampleEvery = static_cast<label_t>(400);
+
+inline constexpr real_t jetStatsStartTStar = static_cast<real_t>(jetStatsStartStep) * jet_velocity / jet_diameter;
 
 // ============================================================
 // Channel-flow parameters

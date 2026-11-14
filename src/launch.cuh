@@ -77,9 +77,9 @@ __host__ __forceinline__ void launchJetInitialization(const CudaConfig &cfg, Mom
 // Jet boundary conditions
 // ============================================================
 
-__host__ __forceinline__ void launchJetBoundaryConditions(const CudaConfig &cfg, const MomentState &A, MomentState &B) noexcept
+__host__ __forceinline__ void launchJetBoundaryConditions(const CudaConfig &cfg, const MomentState &A, MomentState &B, const label_t completedStep) noexcept
 {
-    jetBoundaryConditionsKernel<<<grid2D_xz(cfg), block2D_xz(cfg)>>>(A, B);
+    jetBoundaryConditionsKernel<<<grid2D_xz(cfg), block2D_xz(cfg)>>>(A, B, completedStep);
 
     CUDA_CHECK(cudaGetLastError());
 }

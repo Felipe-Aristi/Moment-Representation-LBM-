@@ -182,7 +182,7 @@ int runSimulation()
             else if constexpr (Case == SimulationCase::Jet)
             {
                 launchLBM(cfg, *A, *B);
-                launchJetBoundaryConditions(cfg, *A, *B);
+                launchJetBoundaryConditions(cfg, *A, *B, step + 1);
             }
             else
             {

@@ -12,7 +12,7 @@ if str(POST_DIR) not in sys.path:
 
 from prettyPlot import pretty_plot
 from exportAndCrop import export_and_crop
-from post.channelflow.validation.statistics_io import DEFAULT_DATA_DIR, fit_virtual_origin, load_radial_profiles
+from statistics_io import DEFAULT_DATA_DIR, fit_virtual_origin, load_radial_profiles
 
 red = "#E03A3E"
 blue = "#009DDC"
@@ -67,7 +67,7 @@ def make_pretty_rms_axis(xlim, ylim, ylabel):
         yLabel=ylabel,
         yScientificNotation=False,
         xTickFormat=2,
-        yTickFormat=2,
+        yTickFormat=3,
         nxTicks=5,
         nyTicks=7,
         useColorBar=False,

@@ -21,7 +21,7 @@ __global__ void initializeJetBulkKernel(MomentState state);
 
 __global__ void initializeJetInletKernel(MomentState state);
 
-__global__ void jetBoundaryConditionsKernel(const __grid_constant__ MomentState A, const __grid_constant__ MomentState B);
+__global__ void jetBoundaryConditionsKernel(const __grid_constant__ MomentState A, const __grid_constant__ MomentState B, const label_t completedStep);
 
 __global__ void initializeChannelFlowKernel(MomentState state);
 

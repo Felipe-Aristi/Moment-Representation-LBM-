@@ -10,6 +10,7 @@
 #include "utilities/indexing.cuh"
 #include "utilities/bounds.cuh"
 #include "utilities/constexprFor.cuh"
+#include "utilities/mathUtilities.cuh"
 
 // ============================================================
 // Local moment accumulator
@@ -58,14 +59,15 @@ struct LocalState
 template <label_t I>
 __device__ __forceinline__ real_t fstar(const real_t rho, const real_t ux, const real_t uy, const real_t uz,
                                         const real_t pixx, const real_t pixy, const real_t pixz,
-                                        const real_t piyy, const real_t piyz, const real_t pizz) noexcept
+                                        const real_t piyy, const real_t piyz, const real_t pizz,
+                                        const real_t omsLocal) noexcept
 {
     const real_t cu = latticeCu<I>(ux, uy, uz);
 
     const real_t fieq = feq<I>(rho, ux, uy, uz, cu);
     const real_t fineq = fneqr<I>(ux, uy, uz, pixx, pixy, pixz, piyy, piyz, pizz, cu);
 
-    return fieq + oms * fineq;
+    return fieq + omsLocal  * fineq;
 }
 
 // ============================================================
@@ -258,13 +260,22 @@ __device__ __forceinline__ void lbm(const label_t x, const label_t y, const labe
 
 
 
-        const real_t fi = fstar<i>(rho_s, ux_s, uy_s, uz_s,
-                                   pixx_s, pixy_s, pixz_s,
-                                   piyy_s, piyz_s, pizz_s);
+        real_t omsLocal = oms;
 
+        if constexpr (simulationCase == SimulationCase::Jet)
+        {
+            const label_t sourceY = pully<i>(y);
 
+            omsLocal = static_cast<real_t>(1) - jetSpongeOmega(sourceY);
+        }
 
-        accumulate<i>(fi, moments); });
+        const real_t fi = fstar<i>(
+            rho_s, ux_s, uy_s, uz_s,
+            pixx_s, pixy_s, pixz_s,
+            piyy_s, piyz_s, pizz_s,
+            omsLocal);
+
+        accumulate<i>(fi, moments);  });
 
     const LocalState state = recoverMoments(moments);
 

@@ -40,7 +40,7 @@ __device__ __forceinline__ void initializeJetInlet(const label_t x, const label_
 
     const label_t idB = idx(x, yB, z);
 
-    const real_t uyB = isJet(x, z) * jet_velocity;
+    const real_t uyB =  jetInletVelocity(x, z, static_cast<label_t>(0));
 
     state.rho[idB] = rho0;
 

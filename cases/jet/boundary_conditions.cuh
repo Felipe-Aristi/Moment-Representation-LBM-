@@ -1,3 +1,4 @@
+
 #ifndef JET_BOUNDARY_CONDITIONS_CUH
 #define JET_BOUNDARY_CONDITIONS_CUH
 
@@ -12,7 +13,8 @@
 // Jet inlet
 // ============================================================
 
-__device__ __forceinline__ void jetInletBC(const label_t x, const label_t z, const MomentState &B) noexcept
+__device__ __forceinline__
+void jetInletBC(const label_t x, const label_t z, const MomentState &B, const label_t completedStep) noexcept
 {
     constexpr label_t yB = static_cast<label_t>(0);
     constexpr label_t yF = static_cast<label_t>(1);
@@ -20,7 +22,7 @@ __device__ __forceinline__ void jetInletBC(const label_t x, const label_t z, con
     const label_t idB = idx(x, yB, z);
     const label_t idF = idx(x, yF, z);
 
-    const real_t uyB = isJet(x, z) * jet_velocity;
+    const real_t uyB = jetInletVelocity(x, z, completedStep);
 
     B.rho[idB] = rho0;
 
@@ -38,13 +40,16 @@ __device__ __forceinline__ void jetInletBC(const label_t x, const label_t z, con
 }
 
 // ============================================================
-// Convective-Neumann jet outlet
-// A = state at t
-// B = state at t + 1
+// Neumann outlet
+//
+// Zero normal gradient:
+// phi(yB) = phi(yF)
+//
+// Applied to density, velocity and non-equilibrium moments.
 // ============================================================
 
-__device__ __forceinline__ void jetOutletBC(const label_t x, const label_t z,
-                                            const MomentState &A, const MomentState &B) noexcept
+__device__ __forceinline__
+void jetOutletBC(const label_t x, const label_t z, const MomentState &B) noexcept
 {
     constexpr label_t yB = NY - static_cast<label_t>(1);
     constexpr label_t yF = NY - static_cast<label_t>(2);
@@ -52,24 +57,15 @@ __device__ __forceinline__ void jetOutletBC(const label_t x, const label_t z,
     const label_t idB = idx(x, yB, z);
     const label_t idF = idx(x, yF, z);
 
-    real_t uc = A.uy[idF];
+    // Density
+    B.rho[idB] = B.rho[idF];
 
-    if (uc < static_cast<real_t>(0))
-    {
-        uc = static_cast<real_t>(0);
-    }
+    // Velocity
+    B.ux[idB] = B.ux[idF];
+    B.uy[idB] = B.uy[idF];
+    B.uz[idB] = B.uz[idF];
 
-    if (uc > static_cast<real_t>(1))
-    {
-        uc = static_cast<real_t>(1);
-    }
-
-    B.rho[idB] = convectiveOutlet(A.rho[idB], A.rho[idF], uc);
-
-    B.ux[idB] = convectiveOutlet(A.ux[idB], A.ux[idF], uc);
-    B.uy[idB] = convectiveOutlet(A.uy[idB], A.uy[idF], uc);
-    B.uz[idB] = convectiveOutlet(A.uz[idB], A.uz[idF], uc);
-
+    // Non-equilibrium stress
     B.pixx[idB] = B.pixx[idF];
     B.pixy[idB] = B.pixy[idF];
     B.pixz[idB] = B.pixz[idF];
@@ -83,10 +79,17 @@ __device__ __forceinline__ void jetOutletBC(const label_t x, const label_t z,
 // Complete jet boundary conditions
 // ============================================================
 
-__device__ __forceinline__ void jetBoundaryConditions(const label_t x, const label_t z,
-                                                      const MomentState &A, const MomentState &B) noexcept
+__device__ __forceinline__
+void jetBoundaryConditions(const label_t x,
+                           const label_t z,
+                           const MomentState &A,
+                           const MomentState &B,
+                           const label_t completedStep) noexcept
 {
-    jetInletBC(x, z, B);
-    jetOutletBC(x, z, A, B);
+    (void)A;
+
+    jetInletBC(x, z, B, completedStep);
+    jetOutletBC(x, z, B);
 }
-#endif
+
+#endif // JET_BOUNDARY_CONDITIONS_CUH

@@ -163,17 +163,16 @@ __global__ void initializeJetInletKernel(MomentState state)
 // Jet boundary conditions
 // ============================================================
 
-__global__ void jetBoundaryConditionsKernel(const __grid_constant__ MomentState A, const __grid_constant__ MomentState B)
+__global__ void jetBoundaryConditionsKernel(const __grid_constant__ MomentState A, const __grid_constant__ MomentState B, const label_t completedStep)
 {
     const label_t x = static_cast<label_t>(blockIdx.x * blockDim.x + threadIdx.x);
+
     const label_t z = static_cast<label_t>(blockIdx.y * blockDim.y + threadIdx.y);
 
     if (inlet_outlet_interior(x, z))
-    {
         return;
-    }
 
-    jetBoundaryConditions(x, z, A, B);
+    jetBoundaryConditions(x, z, A, B, completedStep);
 }
 
 // ============================================================
