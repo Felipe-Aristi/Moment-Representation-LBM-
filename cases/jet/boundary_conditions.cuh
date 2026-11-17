@@ -14,7 +14,10 @@
 // ============================================================
 
 __device__ __forceinline__
-void jetInletBC(const label_t x, const label_t z, const MomentState &B, const label_t completedStep) noexcept
+void jetInletBC(const label_t x,
+                const label_t z,
+                const MomentState &B,
+                const label_t completedStep) noexcept
 {
     constexpr label_t yB = static_cast<label_t>(0);
     constexpr label_t yF = static_cast<label_t>(1);
@@ -40,16 +43,24 @@ void jetInletBC(const label_t x, const label_t z, const MomentState &B, const la
 }
 
 // ============================================================
-// Neumann outlet
+// Convective outlet
 //
-// Zero normal gradient:
-// phi(yB) = phi(yF)
+// Same macroscopic update as the Color-Gradient solver:
 //
-// Applied to density, velocity and non-equilibrium moments.
+// phi_B^(n+1) = phi_B^n - uc^n * (phi_B^n - phi_F^n)
+//
+// A = state at time n
+// B = state at time n+1
+//
+// Non-equilibrium moments are extrapolated from
+// the last physical plane at the new time level.
 // ============================================================
 
 __device__ __forceinline__
-void jetOutletBC(const label_t x, const label_t z, const MomentState &B) noexcept
+void jetOutletBC(const label_t x,
+                 const label_t z,
+                 const MomentState &A,
+                 const MomentState &B) noexcept
 {
     constexpr label_t yB = NY - static_cast<label_t>(1);
     constexpr label_t yF = NY - static_cast<label_t>(2);
@@ -57,15 +68,50 @@ void jetOutletBC(const label_t x, const label_t z, const MomentState &B) noexcep
     const label_t idB = idx(x, yB, z);
     const label_t idF = idx(x, yF, z);
 
-    // Density
-    B.rho[idB] = B.rho[idF];
+    // ========================================================
+    // Local convective velocity
+    // ========================================================
 
-    // Velocity
-    B.ux[idB] = B.ux[idF];
-    B.uy[idB] = B.uy[idF];
-    B.uz[idB] = B.uz[idF];
+    real_t uc = A.uy[idF];
 
-    // Non-equilibrium stress
+    if (uc < static_cast<real_t>(0))
+        uc = static_cast<real_t>(0);
+
+    if (uc > static_cast<real_t>(1))
+        uc = static_cast<real_t>(1);
+
+    // ========================================================
+    // Convective density
+    // ========================================================
+
+    B.rho[idB] = convectiveOutlet(
+        A.rho[idB],
+        A.rho[idF],
+        uc);
+
+    // ========================================================
+    // Convective velocity
+    // ========================================================
+
+    B.ux[idB] = convectiveOutlet(
+        A.ux[idB],
+        A.ux[idF],
+        uc);
+
+    B.uy[idB] = convectiveOutlet(
+        A.uy[idB],
+        A.uy[idF],
+        uc);
+
+    B.uz[idB] = convectiveOutlet(
+        A.uz[idB],
+        A.uz[idF],
+        uc);
+
+    // ========================================================
+    // Neumann extrapolation of non-equilibrium moments
+    // ========================================================
+
     B.pixx[idB] = B.pixx[idF];
     B.pixy[idB] = B.pixy[idF];
     B.pixz[idB] = B.pixz[idF];
@@ -86,10 +132,9 @@ void jetBoundaryConditions(const label_t x,
                            const MomentState &B,
                            const label_t completedStep) noexcept
 {
-    (void)A;
-
     jetInletBC(x, z, B, completedStep);
-    jetOutletBC(x, z, B);
+
+    jetOutletBC(x, z, A, B);
 }
 
 #endif // JET_BOUNDARY_CONDITIONS_CUH

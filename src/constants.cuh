@@ -37,9 +37,9 @@ inline constexpr label_t tgvGridNX = static_cast<label_t>(130);
 inline constexpr label_t tgvGridNY = static_cast<label_t>(130);
 inline constexpr label_t tgvGridNZ = static_cast<label_t>(130);
 
-inline constexpr label_t jetGridNX = static_cast<label_t>(130);
-inline constexpr label_t jetGridNY = static_cast<label_t>(402);
-inline constexpr label_t jetGridNZ = static_cast<label_t>(130);
+inline constexpr label_t jetGridNX = static_cast<label_t>(300);
+inline constexpr label_t jetGridNY = static_cast<label_t>(500);
+inline constexpr label_t jetGridNZ = static_cast<label_t>(300);
 
 inline constexpr label_t channelGridNX = static_cast<label_t>(258);
 inline constexpr label_t channelGridNY = static_cast<label_t>(129);
@@ -181,7 +181,7 @@ inline constexpr real_t jet_nu = jet_diameter * jet_velocity / jet_Re;
 
 inline constexpr label_t jetSpongeCells = (jetGridNY - static_cast<label_t>(2)) / static_cast<label_t>(12);
 
-inline constexpr real_t jetSpongeGain = static_cast<real_t>(200.0);
+inline constexpr real_t jetSpongeGain = static_cast<real_t>(0.0);
 
 inline constexpr label_t jetSpongeYEnd = jetGridNY - static_cast<label_t>(2);
 
